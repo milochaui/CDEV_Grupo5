@@ -48,7 +48,8 @@ function volumenSegunDistancia(distancia) {
  * @param {THREE.AudioListener} oyente  Los "oídos" del jugador (van pegados a la cámara)
  * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} temas  Lista de temas en orden
  * @returns {{ sonido: THREE.PositionalAudio, arrancar: () => void, temaActual: () => object,
- *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number }}
+ *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number,
+ *             estaSonando: () => boolean, graves: () => number }}
  */
 export function crearMusica(oyente, temas) {
   // PositionalAudio es un sonido con posición en el mundo 3D: se agrega al escenario
@@ -66,6 +67,32 @@ export function crearMusica(oyente, temas) {
   // que su sonido pase por el "parlante" 3D. Ventaja: el mp3 se va cargando mientras suena.
   const elemento = new Audio();
   sonido.setMediaElementSource(elemento);
+
+  // --- Análisis del audio (para que el público salte con los golpes) ---
+  // Un AnalyserNode "escucha" el sonido y nos dice cuánta energía hay en cada frecuencia.
+  // Lo conectamos a sonido.source (el sonido del mp3 tal cual sale del <audio>), ANTES
+  // del volumen por distancia y del volumen general. Así el público oye a su banda
+  // igual de fuerte aunque el jugador esté lejos o en pausa.
+  // (Un nodo puede conectarse a varios destinos: el sonido sigue llegando a los parlantes.)
+  const analizador = sonido.context.createAnalyser();
+  // fftSize = cuántas muestras usa para el análisis. Con 1024 obtenemos 512 "franjas"
+  // de frecuencia, de unos 43 Hz cada una (depende de la placa de sonido).
+  analizador.fftSize = 1024;
+  // Rango que mide, en decibeles: de −60 dB (casi nada) a 0 dB (lo más fuerte posible).
+  // Así un tema bien fuerte no llega al tope y todavía se notan los golpes.
+  analizador.minDecibels = -60;
+  analizador.maxDecibels = 0;
+  // Suavizado entre una medición y la siguiente (de 0 a 1). Con poco suavizado
+  // los golpes se notan más rápido.
+  analizador.smoothingTimeConstant = 0.5;
+  sonido.source.connect(analizador);
+
+  // Lista donde el analizador nos deja la energía de cada franja (de 0 a 255).
+  const datosFrecuencias = new Uint8Array(analizador.frequencyBinCount);
+  // Qué franjas son "graves" (bombo y bajo): de unos 40 Hz a unos 150 Hz.
+  const anchoFranja = sonido.context.sampleRate / analizador.fftSize; // Hz por franja
+  const primeraFranjaGrave = Math.max(1, Math.floor(40 / anchoFranja));
+  const ultimaFranjaGrave = Math.ceil(150 / anchoFranja);
 
   // Posición en la lista del tema que está sonando.
   let indice = 0;
@@ -95,6 +122,23 @@ export function crearMusica(oyente, temas) {
     return temas[indice];
   }
 
+  // true si el tema está sonando (antes del primer clic, por ejemplo, no suena).
+  function estaSonando() {
+    return !elemento.paused;
+  }
+
+  // Energía de los graves en este momento, de 0 (nada) a 1 (al máximo).
+  // Es el promedio de las franjas graves que mide el analizador.
+  function graves() {
+    analizador.getByteFrequencyData(datosFrecuencias);
+    let suma = 0;
+    for (let i = primeraFranjaGrave; i <= ultimaFranjaGrave; i++) {
+      suma += datosFrecuencias[i];
+    }
+    const cantidad = ultimaFranjaGrave - primeraFranjaGrave + 1;
+    return suma / cantidad / 255;
+  }
+
   // Volumen actual (de 0 a 1) según dónde está el jugador.
   let volumenActual = 0;
   const posicionParlante = new THREE.Vector3(); // la reusamos en cada cuadro
@@ -114,5 +158,5 @@ export function crearMusica(oyente, temas) {
     return volumenActual;
   }
 
-  return { sonido, arrancar, temaActual, actualizarVolumen, volumen };
+  return { sonido, arrancar, temaActual, actualizarVolumen, volumen, estaSonando, graves };
 }

@@ -227,8 +227,10 @@ function animar(tiempo) {
 
   jugador.actualizar(delta);
   // El volumen de cada banda depende de dónde quedó parado el jugador.
+  // Y cada público reacciona a la música de su escenario.
   for (const escenario of escenarios) {
     escenario.userData.musica.actualizarVolumen(camara.position);
+    escenario.userData.publico.actualizar(delta);
   }
   actualizarIndicador();
   renderer.render(escena, camara);

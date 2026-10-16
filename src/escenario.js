@@ -3,6 +3,7 @@
 // distintos escenarios, cada uno con su banda, su color y su posición.
 import * as THREE from 'three';
 import { crearMusica } from './musica.js';
+import { crearPublico } from './publico.js';
 
 // --- Medidas del escenario, en metros ---
 const ANCHO = 24; // de izquierda a derecha
@@ -35,6 +36,7 @@ const GROSOR_VIGA = 0.6;
  *    y el ángulo de giro de su escenario (ver jugador.js).
  *  - musica: la música del escenario. Por ejemplo, musica.temaActual().conocido
  *    dice si el tema que suena ahora es conocido.
+ *  - publico: la gente frente al escenario. publico.actualizar(delta) la anima.
  */
 export function crearEscenario(config) {
   const escenario = new THREE.Group();
@@ -68,6 +70,13 @@ export function crearEscenario(config) {
   musica.sonido.position.set(0, 4, PROFUNDIDAD / 2);
   escenario.add(musica.sonido);
   escenario.userData.musica = musica;
+
+  // Público: arranca en el frente de la tarima y se extiende hacia adelante (+Z).
+  // Como es parte del grupo, queda movido y girado junto con el escenario.
+  const publico = crearPublico(musica);
+  publico.grupo.position.z = PROFUNDIDAD / 2;
+  escenario.add(publico.grupo);
+  escenario.userData.publico = publico;
 
   // Movemos todo el grupo al lugar del predio indicado.
   escenario.position.set(config.posicion.x, 0, config.posicion.z);
