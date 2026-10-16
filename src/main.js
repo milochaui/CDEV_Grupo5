@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { crearEscenario } from './escenario.js';
 import { crearJugador } from './jugador.js';
-import { DISTANCIA_SILENCIO } from './musica.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -28,7 +27,7 @@ const camara = new THREE.PerspectiveCamera(
 // mirando hacia la pantalla de Ciro y los Persas. La altura (1.7 m, los ojos de
 // una persona) la fija el jugador en jugador.js.
 camara.position.set(0, 1.7, 0);
-camara.lookAt(0, 7, -70);
+camara.lookAt(0, 7, -98);
 
 // --- Sonido ---
 // El AudioListener son los "oídos" del jugador. Lo pegamos a la cámara para que
@@ -77,11 +76,13 @@ escena.add(piso);
 // --- Escenarios ---
 // Como en un festival real, los tres escenarios forman un triángulo y todos miran
 // hacia una zona central, el centro del predio (0, 0).
-// Sus centros están a 70 m de ese punto y separados 120° entre sí (un triángulo equilátero):
-//  - Ciro y los Persas al frente:        (0, -70)
-//  - Las Pastillas del Abuelo atrás a la izquierda: (-61, 35)
-//  - Andrés Calamaro atrás a la derecha:   (61, 35)
-// Así hay unos 110 m de un escenario a otro: caminando (5 m/s) se tarda unos 22 segundos.
+// Sus centros están a 98 m de ese punto y separados 120° entre sí (un triángulo equilátero):
+//  - Ciro y los Persas al frente:                   (0, -98)
+//  - Las Pastillas del Abuelo atrás a la izquierda: (-85, 49)
+//  - Andrés Calamaro atrás a la derecha:            (85, 49)
+// Así hay unos 170 m de un escenario a otro. Caminando (5 m/s) se tarda unos 25 segundos
+// en ir del público de un escenario al del otro, y corriendo (Shift) la mitad.
+// Los escenarios quedan a menos de 110 m del centro: el predio (de -250 a 250) sobra.
 const CENTRO_PREDIO = { x: 0, z: 0 };
 
 // En cada lista, los temas suenan en ese orden y al terminar la lista vuelve a empezar.
@@ -89,7 +90,7 @@ const escenarios = [
   crearEscenario({
     nombre: 'Ciro y los Persas',
     color: 0xff3355, // rojo
-    posicion: { x: 0, z: -70 },
+    posicion: { x: 0, z: -98 },
     mirarHacia: CENTRO_PREDIO,
     temas: [
       { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
@@ -100,7 +101,7 @@ const escenarios = [
   crearEscenario({
     nombre: 'Las Pastillas del Abuelo',
     color: 0xff9900, // ámbar
-    posicion: { x: -61, z: 35 },
+    posicion: { x: -85, z: 49 },
     mirarHacia: CENTRO_PREDIO,
     temas: [
       { archivo: 'pastillas_conocido_viejokarma.mp3', titulo: 'Viejo Karma', conocido: true },
@@ -111,7 +112,7 @@ const escenarios = [
   crearEscenario({
     nombre: 'Andrés Calamaro',
     color: 0x33aaff, // celeste
-    posicion: { x: 61, z: 35 },
+    posicion: { x: 85, z: 49 },
     mirarHacia: CENTRO_PREDIO,
     temas: [
       { archivo: 'calamaro_conocido_sindocumentos.mp3', titulo: 'Sin documentos', conocido: true },
@@ -174,31 +175,26 @@ jugador.controles.addEventListener('unlock', () => {
 
 // --- Indicador del tema que suena ---
 // Muestra la banda que más fuerte se escucha y el tema que está tocando.
-// Las tres bandas bajan de volumen con la distancia de la misma forma (ver musica.js),
-// así que la que más fuerte se escucha es la que tiene el parlante más cerca.
 // Si estamos tan lejos que no se escucha ninguna, el cartelito se esconde.
 const indicadorTema = document.getElementById('tema-actual');
-const posicionParlante = new THREE.Vector3(); // lo reusamos en cada cuadro
 
 function actualizarIndicador() {
-  // Buscamos el escenario con el parlante más cercano.
-  let masCercano = null;
-  let menorDistancia = Infinity; // arrancamos con "infinito": cualquier distancia es menor
+  // Buscamos el escenario cuya música tiene más volumen en este momento.
+  let masFuerte = null;
+  let mayorVolumen = 0; // si ninguna banda supera 0 (no se oye nada), masFuerte queda en null
   for (const escenario of escenarios) {
-    // getWorldPosition nos da la posición del parlante en coordenadas del predio.
-    escenario.userData.musica.sonido.getWorldPosition(posicionParlante);
-    const distancia = camara.position.distanceTo(posicionParlante);
-    if (distancia < menorDistancia) {
-      menorDistancia = distancia;
-      masCercano = escenario;
+    const volumen = escenario.userData.musica.volumen();
+    if (volumen > mayorVolumen) {
+      mayorVolumen = volumen;
+      masFuerte = escenario;
     }
   }
 
   let texto = '';
-  if (musicaArrancada && menorDistancia < DISTANCIA_SILENCIO) {
+  if (musicaArrancada && masFuerte !== null) {
     // crearEscenario deja guardado el nombre de la banda en userData.
-    const banda = masCercano.userData.nombre;
-    texto = '♪ ' + banda + ' — ' + masCercano.userData.musica.temaActual().titulo;
+    const banda = masFuerte.userData.nombre;
+    texto = '♪ ' + banda + ' — ' + masFuerte.userData.musica.temaActual().titulo;
   }
 
   // Solo tocamos la página si el texto cambió (cambiarla en cada cuadro es trabajo de más).
@@ -230,6 +226,10 @@ function animar(tiempo) {
   const delta = Math.min(timer.getDelta(), 0.1);
 
   jugador.actualizar(delta);
+  // El volumen de cada banda depende de dónde quedó parado el jugador.
+  for (const escenario of escenarios) {
+    escenario.userData.musica.actualizarVolumen(camara.position);
+  }
   actualizarIndicador();
   renderer.render(escena, camara);
 }
