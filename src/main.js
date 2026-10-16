@@ -1,6 +1,7 @@
 // Punto de entrada del simulador.
-// Por ahora solo arma una escena básica: piso verde, cielo de noche y una cámara.
+// Arma la escena: predio, cielo de noche, iluminación, cámara y el primer escenario.
 import * as THREE from 'three';
+import { crearEscenario } from './escenario.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -21,25 +22,30 @@ const camara = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-// La ubicamos a la altura de los ojos de una persona (1.7 metros)
-// y un poco hacia atrás, mirando hacia adelante y levemente hacia el piso.
-camara.position.set(0, 1.7, 10);
-camara.lookAt(0, 0, 0);
+// Cámara fija, como una persona parada en el público: a la altura de los ojos
+// (1.7 metros), unos 30 metros delante del escenario 1, mirando hacia la pantalla.
+camara.position.set(-60, 1.7, -10);
+camara.lookAt(-60, 7, -40);
 
 // --- Renderer ---
 // El renderer es el que "dibuja" la escena vista desde la cámara en un <canvas>.
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+// En pantallas de muy alta densidad limitamos a 2x: se ve igual de bien y es más liviano.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// --- Luces ---
-// Luz ambiente: ilumina todo un poco, para que nada quede totalmente negro.
-const luzAmbiente = new THREE.AmbientLight(0x6070a0, 0.6);
-escena.add(luzAmbiente);
+// --- Iluminación general ---
+// Ninguna luz proyecta sombras: las sombras son lo más pesado de dibujar.
+
+// Luz hemisférica: ilumina desde arriba con un color (cielo) y desde abajo con otro (suelo).
+// Hace que la noche se vea oscura pero sin que nada quede totalmente negro.
+// HemisphereLight(color del cielo, color del suelo, intensidad)
+const luzGeneral = new THREE.HemisphereLight(0x4a5a99, 0x1a3311, 1.2);
+escena.add(luzGeneral);
 
 // Luz de luna: una luz direccional (como el sol, pero más tenue y azulada).
-const luzLuna = new THREE.DirectionalLight(0xaabbff, 0.8);
+const luzLuna = new THREE.DirectionalLight(0xaabbff, 0.6);
 luzLuna.position.set(-50, 100, 50);
 escena.add(luzLuna);
 
@@ -51,6 +57,16 @@ const piso = new THREE.Mesh(geometriaPiso, materialPiso);
 // Los planos se crean "parados" (verticales); lo rotamos 90° para que quede acostado.
 piso.rotation.x = -Math.PI / 2;
 escena.add(piso);
+
+// --- Escenarios ---
+// Escenario 1, hacia la izquierda del predio.
+// Dejamos lugar libre en el centro y a la derecha para los otros dos.
+const escenario1 = crearEscenario({
+  nombre: 'Ciro y los Persas',
+  color: 0xff3355,
+  posicion: { x: -60, z: -40 },
+});
+escena.add(escenario1);
 
 // --- Ajuste al cambiar el tamaño de la ventana ---
 window.addEventListener('resize', () => {
