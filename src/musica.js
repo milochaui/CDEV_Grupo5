@@ -3,12 +3,14 @@
 // según hacia dónde mira el jugador.
 import * as THREE from 'three';
 
-// --- Cómo baja el volumen con la distancia ---
-// Con el modelo 'inverse' (el más parecido al sonido real) el volumen es:
-//   volumen = DISTANCIA_REFERENCIA / (DISTANCIA_REFERENCIA + ATENUACION × (distancia − DISTANCIA_REFERENCIA))
-// Con estos valores: a 30 m ≈ 57 %, a 60 m ≈ 25 %, a 100 m ≈ 14 %, a 200 m ≈ 7 %.
-const DISTANCIA_REFERENCIA = 20; // metros: hasta acá suena al 100 %
-const ATENUACION = 1.5; // qué tan rápido baja después (más alto = baja más rápido)
+// --- Cómo baja el volumen con la distancia (tres zonas) ---
+// 1. Hasta DISTANCIA_VOLUMEN_COMPLETO: suena al 100 %.
+// 2. Entre DISTANCIA_VOLUMEN_COMPLETO y DISTANCIA_SILENCIO: baja de a poco, en línea recta.
+// 3. Más allá de DISTANCIA_SILENCIO: silencio total.
+// Con estos valores: a 20 m = 100 %, a 50 m ≈ 73 %, a 75 m = 50 %, a 100 m ≈ 27 %,
+// a 120 m ≈ 9 % y desde 130 m = 0 %.
+const DISTANCIA_VOLUMEN_COMPLETO = 20; // metros
+const DISTANCIA_SILENCIO = 130; // metros
 
 // Vite sirve la carpeta public/audio en la dirección /audio
 const CARPETA_AUDIO = '/audio/';
@@ -25,9 +27,14 @@ export function crearMusica(oyente, temas) {
   // como cualquier otro objeto. Por defecto usa el modelo 'HRTF', que simula cómo llega
   // el sonido a cada oído, y así se nota de qué lado viene.
   const sonido = new THREE.PositionalAudio(oyente);
-  sonido.setDistanceModel('inverse');
-  sonido.setRefDistance(DISTANCIA_REFERENCIA);
-  sonido.setRolloffFactor(ATENUACION);
+  // El modelo 'linear' es el único que llega a silencio total: el volumen baja en
+  // línea recta desde la distancia de referencia (refDistance) hasta la máxima (maxDistance).
+  //   volumen = 1 − (distancia − refDistance) / (maxDistance − refDistance)
+  sonido.setDistanceModel('linear');
+  sonido.setRefDistance(DISTANCIA_VOLUMEN_COMPLETO);
+  sonido.setMaxDistance(DISTANCIA_SILENCIO);
+  // Con rolloffFactor = 1 el volumen llega justo a 0 en maxDistance.
+  sonido.setRolloffFactor(1);
 
   // Un elemento <audio> de HTML reproduce el mp3. Lo conectamos al PositionalAudio para
   // que su sonido pase por el "parlante" 3D. Ventaja: el mp3 se va cargando mientras suena.

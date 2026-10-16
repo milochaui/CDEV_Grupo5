@@ -132,10 +132,11 @@ jugador.controles.addEventListener('unlock', () => {
 });
 
 // --- Indicador del tema que suena ---
-// Solo aparece cuando estamos lo bastante cerca del escenario para escucharlo bien
-// (a 60 m el volumen ya bajó a un 25 % aproximadamente).
+// Solo aparece cuando estamos lo bastante cerca del escenario para escucharlo bien:
+// hasta 75 m, donde el volumen todavía está a la mitad (ver musica.js).
+// Más lejos la música se sigue oyendo, cada vez más bajo, hasta apagarse a los 130 m.
 const indicadorTema = document.getElementById('tema-actual');
-const DISTANCIA_INDICADOR = 60; // metros
+const DISTANCIA_INDICADOR = 75; // metros
 const posicionParlante = new THREE.Vector3(); // lo reusamos en cada cuadro
 
 function actualizarIndicador() {
