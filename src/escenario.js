@@ -16,19 +16,23 @@ const GROSOR_VIGA = 0.6;
 /**
  * Crea un escenario completo y lo devuelve como un THREE.Group.
  * Un Group junta muchos objetos para poder moverlos todos juntos como si fueran uno.
- * El frente del escenario mira hacia +Z.
+ * Todas las partes se arman con el frente mirando hacia +Z y después se gira
+ * el grupo entero para que mire hacia el punto "mirarHacia".
  *
  * @param {object} config
  * @param {string} config.nombre    Nombre de la banda (se muestra en el cartel)
  * @param {number} config.color     Color principal en hexadecimal, por ejemplo 0xff3355
  * @param {{x: number, z: number}} config.posicion  Lugar del predio donde va el escenario
+ * @param {{x: number, z: number}} config.mirarHacia  Punto del predio hacia donde mira el frente
  * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} config.temas
  *        Temas que toca la banda, en orden (archivo = nombre del mp3 en public/audio)
  * @param {THREE.AudioListener} config.oyente  Los "oídos" del jugador
  *
  * Además, en escenario.userData deja:
+ *  - nombre: el nombre de la banda.
  *  - colisiones: la lista de zonas sólidas (tarima y torres de parlantes)
- *    que el jugador no puede atravesar.
+ *    que el jugador no puede atravesar. Cada caja guarda también el centro
+ *    y el ángulo de giro de su escenario (ver jugador.js).
  *  - musica: la música del escenario. Por ejemplo, musica.temaActual().conocido
  *    dice si el tema que suena ahora es conocido.
  */
@@ -36,6 +40,8 @@ export function crearEscenario(config) {
   const escenario = new THREE.Group();
 
   // userData es un objeto libre que Three.js nos deja usar para guardar datos propios.
+  // Guardamos el nombre de la banda (lo usa el indicador del tema que suena).
+  escenario.userData.nombre = config.nombre;
   // Acá vamos juntando las cajas de colisión a medida que creamos las partes.
   escenario.userData.colisiones = [];
 
@@ -66,20 +72,29 @@ export function crearEscenario(config) {
   // Movemos todo el grupo al lugar del predio indicado.
   escenario.position.set(config.posicion.x, 0, config.posicion.z);
 
-  // Las cajas de colisión se calcularon con el escenario en el origen (0, 0).
-  // Les sumamos la posición para que queden en coordenadas del predio.
+  // Giramos el grupo para que el frente mire hacia "mirarHacia".
+  // Si el escenario gira un ángulo θ sobre el eje vertical (Y), su frente (+Z) pasa a
+  // apuntar en la dirección (seno θ, coseno θ). Math.atan2(x, z) hace la cuenta al revés:
+  // a partir de la dirección (dx, dz) nos da el ángulo θ.
+  const dx = config.mirarHacia.x - config.posicion.x;
+  const dz = config.mirarHacia.z - config.posicion.z;
+  const angulo = Math.atan2(dx, dz);
+  escenario.rotation.y = angulo;
+
+  // Las cajas de colisión se calcularon con el escenario en el origen (0, 0) y sin girar.
+  // No las movemos: les anotamos dónde está el escenario y cuánto giró, y el jugador
+  // hace la cuenta al revés con su propia posición (ver chocaConAlgo en jugador.js).
   for (const caja of escenario.userData.colisiones) {
-    caja.minX += config.posicion.x;
-    caja.maxX += config.posicion.x;
-    caja.minZ += config.posicion.z;
-    caja.maxZ += config.posicion.z;
+    caja.centroX = config.posicion.x;
+    caja.centroZ = config.posicion.z;
+    caja.angulo = angulo;
   }
   return escenario;
 }
 
 // Guarda una caja de colisión vista "desde arriba" (un rectángulo en el piso).
 // Como el jugador siempre camina por el piso, no hace falta tener en cuenta la altura.
-// (x, z) es el centro del rectángulo.
+// (x, z) es el centro del rectángulo, medido desde el centro del escenario sin girar.
 function agregarColision(escenario, x, z, ancho, profundidad) {
   escenario.userData.colisiones.push({
     minX: x - ancho / 2,

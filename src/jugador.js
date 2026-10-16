@@ -17,7 +17,8 @@ const RADIO_JUGADOR = 0.4;
  * @param {THREE.PerspectiveCamera} camara  La cámara que hace de "ojos" del jugador
  * @param {HTMLElement} elemento            Elemento de la página que captura el mouse
  * @param {object} opciones
- * @param {Array} opciones.colisiones  Cajas {minX, maxX, minZ, maxZ} que no se pueden atravesar
+ * @param {Array} opciones.colisiones  Cajas {minX, maxX, minZ, maxZ, centroX, centroZ, angulo}
+ *        que no se pueden atravesar (las arma escenario.js)
  * @param {number} opciones.limitePredio  Distancia máxima al centro del predio (en X y en Z)
  * @returns {{ controles: PointerLockControls, actualizar: (delta: number) => void }}
  */
@@ -56,8 +57,21 @@ export function crearJugador(camara, elemento, opciones) {
   // Agrandamos cada caja con el radio del jugador: es como chequear un círculo contra la caja.
   function chocaConAlgo(x, z) {
     for (const caja of opciones.colisiones) {
-      const adentroEnX = x > caja.minX - RADIO_JUGADOR && x < caja.maxX + RADIO_JUGADOR;
-      const adentroEnZ = z > caja.minZ - RADIO_JUGADOR && z < caja.maxZ + RADIO_JUGADOR;
+      // Las cajas están medidas desde el centro de su escenario y sin girar, pero el
+      // escenario en el predio está movido y girado. En vez de mover y girar la caja,
+      // hacemos lo contrario con el jugador:
+      //  1. le restamos el centro del escenario (queda medido desde ese centro)
+      //  2. lo giramos el mismo ángulo pero para el otro lado (deshace el giro)
+      // Así jugador y caja quedan "derechos" y alcanza con comparar mínimos y máximos.
+      const dx = x - caja.centroX;
+      const dz = z - caja.centroZ;
+      const coseno = Math.cos(caja.angulo);
+      const seno = Math.sin(caja.angulo);
+      const localX = dx * coseno - dz * seno;
+      const localZ = dx * seno + dz * coseno;
+
+      const adentroEnX = localX > caja.minX - RADIO_JUGADOR && localX < caja.maxX + RADIO_JUGADOR;
+      const adentroEnZ = localZ > caja.minZ - RADIO_JUGADOR && localZ < caja.maxZ + RADIO_JUGADOR;
       if (adentroEnX && adentroEnZ) {
         return true;
       }

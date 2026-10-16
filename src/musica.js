@@ -7,10 +7,16 @@ import * as THREE from 'three';
 // 1. Hasta DISTANCIA_VOLUMEN_COMPLETO: suena al 100 %.
 // 2. Entre DISTANCIA_VOLUMEN_COMPLETO y DISTANCIA_SILENCIO: baja de a poco, en línea recta.
 // 3. Más allá de DISTANCIA_SILENCIO: silencio total.
-// Con estos valores: a 20 m = 100 %, a 50 m ≈ 73 %, a 75 m = 50 %, a 100 m ≈ 27 %,
-// a 120 m ≈ 9 % y desde 130 m = 0 %.
-const DISTANCIA_VOLUMEN_COMPLETO = 20; // metros
-const DISTANCIA_SILENCIO = 130; // metros
+// Con estos valores: a 15 m = 100 %, a 20 m ≈ 94 %, a 40 m ≈ 71 %, a 64 m ≈ 42 %,
+// a 94 m ≈ 7 % y desde 100 m = 0 %.
+// Pensados para los tres escenarios en triángulo (ver main.js):
+//  - frente a un escenario (a unos 20 m de su parlante) las otras dos bandas quedan
+//    a unos 94 m: se escuchan apenas, al 7 %.
+//  - en el centro del predio los tres parlantes están a unos 64 m: las tres bandas
+//    suenan al 42 %, más bajas y mezcladas.
+const DISTANCIA_VOLUMEN_COMPLETO = 15; // metros
+// La exportamos porque main.js la usa para saber si alguna banda se escucha.
+export const DISTANCIA_SILENCIO = 100; // metros
 
 // Vite sirve la carpeta public/audio en la dirección /audio
 const CARPETA_AUDIO = '/audio/';

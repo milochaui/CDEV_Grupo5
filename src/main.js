@@ -1,8 +1,9 @@
 // Punto de entrada del simulador.
-// Arma la escena: predio, cielo de noche, iluminación, cámara y el primer escenario.
+// Arma la escena: predio, cielo de noche, iluminación, cámara y los tres escenarios.
 import * as THREE from 'three';
 import { crearEscenario } from './escenario.js';
 import { crearJugador } from './jugador.js';
+import { DISTANCIA_SILENCIO } from './musica.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -23,11 +24,11 @@ const camara = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-// Posición inicial del jugador: parado en el público, unos 30 metros delante
-// del escenario 1, mirando hacia la pantalla. La altura (1.7 m, los ojos de
+// Posición inicial del jugador: en el centro del predio, entre los tres escenarios,
+// mirando hacia la pantalla de Ciro y los Persas. La altura (1.7 m, los ojos de
 // una persona) la fija el jugador en jugador.js.
-camara.position.set(-60, 1.7, -10);
-camara.lookAt(-60, 7, -40);
+camara.position.set(0, 1.7, 0);
+camara.lookAt(0, 7, -70);
 
 // --- Sonido ---
 // El AudioListener son los "oídos" del jugador. Lo pegamos a la cámara para que
@@ -74,25 +75,62 @@ piso.rotation.x = -Math.PI / 2;
 escena.add(piso);
 
 // --- Escenarios ---
-// Escenario 1, hacia la izquierda del predio.
-// Dejamos lugar libre en el centro y a la derecha para los otros dos.
-const escenario1 = crearEscenario({
-  nombre: 'Ciro y los Persas',
-  color: 0xff3355,
-  posicion: { x: -60, z: -40 },
-  // Los temas suenan en este orden y al terminar la lista vuelve a empezar.
-  temas: [
-    { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
-    { archivo: 'ciro_tranqui_servidor.mp3', titulo: 'Servidor', conocido: false },
-  ],
-  oyente: oyente,
-});
-escena.add(escenario1);
+// Como en un festival real, los tres escenarios forman un triángulo y todos miran
+// hacia una zona central, el centro del predio (0, 0).
+// Sus centros están a 70 m de ese punto y separados 120° entre sí (un triángulo equilátero):
+//  - Ciro y los Persas al frente:        (0, -70)
+//  - Las Pastillas del Abuelo atrás a la izquierda: (-61, 35)
+//  - Andrés Calamaro atrás a la derecha:   (61, 35)
+// Así hay unos 110 m de un escenario a otro: caminando (5 m/s) se tarda unos 22 segundos.
+const CENTRO_PREDIO = { x: 0, z: 0 };
+
+// En cada lista, los temas suenan en ese orden y al terminar la lista vuelve a empezar.
+const escenarios = [
+  crearEscenario({
+    nombre: 'Ciro y los Persas',
+    color: 0xff3355, // rojo
+    posicion: { x: 0, z: -70 },
+    mirarHacia: CENTRO_PREDIO,
+    temas: [
+      { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
+      { archivo: 'ciro_tranqui_servidor.mp3', titulo: 'Servidor', conocido: false },
+    ],
+    oyente: oyente,
+  }),
+  crearEscenario({
+    nombre: 'Las Pastillas del Abuelo',
+    color: 0xff9900, // ámbar
+    posicion: { x: -61, z: 35 },
+    mirarHacia: CENTRO_PREDIO,
+    temas: [
+      { archivo: 'pastillas_conocido_viejokarma.mp3', titulo: 'Viejo Karma', conocido: true },
+      { archivo: 'pastillas_tranqui_mejuegoelcorazon.mp3', titulo: 'Me juego el corazón', conocido: false },
+    ],
+    oyente: oyente,
+  }),
+  crearEscenario({
+    nombre: 'Andrés Calamaro',
+    color: 0x33aaff, // celeste
+    posicion: { x: 61, z: 35 },
+    mirarHacia: CENTRO_PREDIO,
+    temas: [
+      { archivo: 'calamaro_conocido_sindocumentos.mp3', titulo: 'Sin documentos', conocido: true },
+      { archivo: 'calamaro_medio_todaviaunacanciondeamor.mp3', titulo: 'Todavía una canción de amor', conocido: false },
+      { archivo: 'calamaro_tranqui_buenasuerteyhastaluego.mp3', titulo: 'Buena suerte y hasta luego', conocido: false },
+    ],
+    oyente: oyente,
+  }),
+];
+
+for (const escenario of escenarios) {
+  escena.add(escenario);
+}
 
 // --- Jugador ---
-// Le pasamos las zonas sólidas de los escenarios y el borde del predio.
+// Le pasamos las zonas sólidas de los tres escenarios y el borde del predio.
+// flatMap junta las listas de colisiones de cada escenario en una sola lista.
 const jugador = crearJugador(camara, document.body, {
-  colisiones: [...escenario1.userData.colisiones],
+  colisiones: escenarios.flatMap((escenario) => escenario.userData.colisiones),
   limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
 });
 
@@ -109,9 +147,12 @@ pantallaInicio.addEventListener('click', () => {
 
   // Los navegadores no dejan reproducir sonido hasta que el usuario interactúa con
   // la página. Por eso la música arranca acá, con este primer clic.
+  // Las tres bandas empiezan a tocar al mismo tiempo, como en un festival.
   if (!musicaArrancada) {
     oyente.context.resume(); // el sonido del navegador empieza "suspendido"
-    escenario1.userData.musica.arrancar();
+    for (const escenario of escenarios) {
+      escenario.userData.musica.arrancar();
+    }
     musicaArrancada = true;
   }
 });
@@ -132,22 +173,32 @@ jugador.controles.addEventListener('unlock', () => {
 });
 
 // --- Indicador del tema que suena ---
-// Solo aparece cuando estamos lo bastante cerca del escenario para escucharlo bien:
-// hasta 75 m, donde el volumen todavía está a la mitad (ver musica.js).
-// Más lejos la música se sigue oyendo, cada vez más bajo, hasta apagarse a los 130 m.
+// Muestra la banda que más fuerte se escucha y el tema que está tocando.
+// Las tres bandas bajan de volumen con la distancia de la misma forma (ver musica.js),
+// así que la que más fuerte se escucha es la que tiene el parlante más cerca.
+// Si estamos tan lejos que no se escucha ninguna, el cartelito se esconde.
 const indicadorTema = document.getElementById('tema-actual');
-const DISTANCIA_INDICADOR = 75; // metros
 const posicionParlante = new THREE.Vector3(); // lo reusamos en cada cuadro
 
 function actualizarIndicador() {
-  const musica = escenario1.userData.musica;
-  // getWorldPosition nos da la posición del parlante en coordenadas del predio.
-  musica.sonido.getWorldPosition(posicionParlante);
-  const distancia = camara.position.distanceTo(posicionParlante);
+  // Buscamos el escenario con el parlante más cercano.
+  let masCercano = null;
+  let menorDistancia = Infinity; // arrancamos con "infinito": cualquier distancia es menor
+  for (const escenario of escenarios) {
+    // getWorldPosition nos da la posición del parlante en coordenadas del predio.
+    escenario.userData.musica.sonido.getWorldPosition(posicionParlante);
+    const distancia = camara.position.distanceTo(posicionParlante);
+    if (distancia < menorDistancia) {
+      menorDistancia = distancia;
+      masCercano = escenario;
+    }
+  }
 
   let texto = '';
-  if (musicaArrancada && distancia < DISTANCIA_INDICADOR) {
-    texto = '♪ Ciro y los Persas — ' + musica.temaActual().titulo;
+  if (musicaArrancada && menorDistancia < DISTANCIA_SILENCIO) {
+    // crearEscenario deja guardado el nombre de la banda en userData.
+    const banda = masCercano.userData.nombre;
+    texto = '♪ ' + banda + ' — ' + masCercano.userData.musica.temaActual().titulo;
   }
 
   // Solo tocamos la página si el texto cambió (cambiarla en cada cuadro es trabajo de más).
