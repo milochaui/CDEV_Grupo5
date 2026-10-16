@@ -91,6 +91,40 @@
         border-radius: 4px;
         pointer-events: none;
       }
+
+      /* Indicador de acciones (cantando, pogo): arriba al centro */
+      #indicador-acciones {
+        display: none; /* se muestra solo mientras hay una acción */
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%); /* centra el cartel sobre su propio medio */
+        padding: 6px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        font-size: 18px;
+        font-weight: bold;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: pre; /* respeta los espacios entre "Cantando" y "Pogo" */
+      }
+
+      /* Aviso del pogo fuera del público: debajo de la mira */
+      #aviso-pogo {
+        display: none; /* se muestra solo si se aprieta F lejos de la gente */
+        position: fixed;
+        top: calc(50% + 40px);
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #ffcc33;
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        border-radius: 4px;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -101,6 +135,10 @@
         <li><b>Mouse</b>: mirar alrededor</li>
         <li><b>W A S D</b> o <b>flechas</b>: caminar</li>
         <li><b>Shift</b>: correr</li>
+        <li><b>Espacio</b>: saltar</li>
+        <li><b>E</b> (mantener): levantar los brazos</li>
+        <li><b>Q</b> (mantener): cantar</li>
+        <li><b>F</b> (mantener): pogo (metido entre el público)</li>
         <li><b>Esc</b> o <b>P</b>: pausa (vuelve a este cartel)</li>
         <li><b>M</b>: silenciar / activar el sonido</li>
       </ul>
@@ -115,6 +153,10 @@
 
     <!-- Tema que está sonando (lo completa main.js) -->
     <div id="tema-actual"></div>
+
+    <!-- Acciones que está haciendo el jugador y aviso del pogo (los completa acciones.js) -->
+    <div id="indicador-acciones"></div>
+    <div id="aviso-pogo"></div>
 
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>

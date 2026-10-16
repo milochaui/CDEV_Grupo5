@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { crearEscenario } from './escenario.js';
 import { crearJugador } from './jugador.js';
+import { crearAcciones } from './acciones.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -28,6 +29,9 @@ const camara = new THREE.PerspectiveCamera(
 // una persona) la fija el jugador en jugador.js.
 camara.position.set(0, 1.7, 0);
 camara.lookAt(0, 7, -98);
+// Agregamos la cámara a la escena para que se dibujen sus hijos: los brazos del
+// jugador (ver acciones.js) van pegados a ella.
+escena.add(camara);
 
 // --- Sonido ---
 // El AudioListener son los "oídos" del jugador. Lo pegamos a la cámara para que
@@ -129,6 +133,9 @@ const jugador = crearJugador(camara, document.body, {
   colisiones: escenarios.flatMap((escenario) => escenario.userData.colisiones),
   limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
 });
+
+// --- Acciones del recital (brazos, salto, cantar y pogo) ---
+const acciones = crearAcciones({ camara, jugador, escenarios });
 
 // --- Pantalla de inicio, pausa y mira ---
 // El mismo cartel sirve de pantalla de inicio y de pantalla de pausa:
@@ -259,7 +266,12 @@ function animar(tiempo) {
   // El volumen de cada banda depende de dónde quedó parado el jugador.
   // Y cada público reacciona a la música de su escenario, salvo en pausa:
   // si el mouse no está capturado no lo actualizamos y queda congelado.
+  // Lo mismo con las acciones del jugador. Van antes que el público, así el
+  // contagio que le mandan se nota en este mismo cuadro.
   const enPausa = !jugador.controles.isLocked;
+  if (!enPausa) {
+    acciones.actualizar(delta);
+  }
   for (const escenario of escenarios) {
     escenario.userData.musica.actualizarVolumen(camara.position);
     if (!enPausa) {

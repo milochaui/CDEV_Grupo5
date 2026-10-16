@@ -64,6 +64,10 @@ public/
 | Mouse | Mirar alrededor |
 | W A S D o flechas | Caminar |
 | Shift (mantener) | Correr |
+| Espacio | Saltar |
+| E (mantener) | Levantar los brazos |
+| Q (mantener) | Cantar |
+| F (mantener) | Pogo (solo metido entre el público) |
 | Esc o P | Pausa (se detiene la música y el público se congela) |
 | M | Silenciar / activar el sonido |
 | Clic | Entrar al juego / continuar después de la pausa |
@@ -76,3 +80,4 @@ public/
 - `src/musica.js`: reproducción de los temas con sonido posicional.
 - `src/publico.js`: el público frente a cada escenario y su reacción a la música.
 - `src/jugador.js`: control en primera persona y colisiones.
+- `src/acciones.js`: acciones del recital (brazos en primera persona, salto, cantar y pogo) y su contagio al público.

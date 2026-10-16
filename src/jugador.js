@@ -4,7 +4,8 @@
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
 // --- Configuración del jugador ---
-const ALTURA_OJOS = 1.7; // metros: a esta altura va la cámara
+// La exportamos porque la usa el salto (ver acciones.js).
+export const ALTURA_OJOS = 1.7; // metros: a esta altura va la cámara
 const VELOCIDAD_CAMINAR = 5; // metros por segundo
 const VELOCIDAD_CORRER = 10; // metros por segundo (con Shift)
 // El jugador ocupa un círculo de este radio en el piso. Sirve para que la cámara
@@ -20,7 +21,8 @@ const RADIO_JUGADOR = 0.4;
  * @param {Array} opciones.colisiones  Cajas {minX, maxX, minZ, maxZ, centroX, centroZ, angulo}
  *        que no se pueden atravesar (las arma escenario.js)
  * @param {number} opciones.limitePredio  Distancia máxima al centro del predio (en X y en Z)
- * @returns {{ controles: PointerLockControls, actualizar: (delta: number) => void }}
+ * @returns {{ controles: PointerLockControls, actualizar: (delta: number) => void,
+ *             desplazar: (dx: number, dz: number) => void }}
  */
 export function crearJugador(camara, elemento, opciones) {
   // PointerLockControls (viene con Three.js) se encarga de:
@@ -80,6 +82,41 @@ export function crearJugador(camara, elemento, opciones) {
   }
 
   /**
+   * Mueve al jugador (dx, dz) metros en el predio, sin dejarlo salir del borde
+   * ni atravesar obstáculos. La usa la caminata y también los empujones del pogo.
+   * @param {number} dx  Metros a moverse en X
+   * @param {number} dz  Metros a moverse en Z
+   */
+  function desplazar(dx, dz) {
+    // Recordamos dónde estábamos antes de movernos.
+    const posicion = camara.position;
+    const anteriorX = posicion.x;
+    const anteriorZ = posicion.z;
+
+    posicion.x += dx;
+    posicion.z += dz;
+
+    // --- Límites del predio ---
+    // Si se pasa del borde, lo dejamos justo en el borde.
+    const limite = opciones.limitePredio - RADIO_JUGADOR;
+    posicion.x = Math.min(Math.max(posicion.x, -limite), limite);
+    posicion.z = Math.min(Math.max(posicion.z, -limite), limite);
+
+    // --- Colisiones ---
+    // Revisamos cada eje por separado: si al moverse en X choca, deshacemos solo X.
+    // Así, al caminar en diagonal contra una pared, el jugador "se desliza" a lo largo
+    // de ella en vez de quedarse trabado.
+    const nuevaX = posicion.x;
+    const nuevaZ = posicion.z;
+    if (chocaConAlgo(nuevaX, anteriorZ)) {
+      posicion.x = anteriorX;
+    }
+    if (chocaConAlgo(posicion.x, nuevaZ)) {
+      posicion.z = anteriorZ;
+    }
+  }
+
+  /**
    * Mueve al jugador según las teclas apretadas. Se llama en cada cuadro de la animación.
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
    */
@@ -112,37 +149,22 @@ export function crearJugador(camara, elemento, opciones) {
     // distancia = velocidad × tiempo. Así se mueve igual en una compu rápida o lenta.
     const distancia = velocidad * delta;
 
-    // Recordamos dónde estábamos antes de movernos.
+    // Movemos la cámara según hacia dónde mira (sin subir ni bajar) y medimos
+    // cuánto se movió. Después la volvemos a donde estaba y hacemos ese mismo
+    // movimiento con desplazar(), que revisa los bordes y las colisiones.
     const posicion = camara.position;
     const anteriorX = posicion.x;
     const anteriorZ = posicion.z;
-
-    // Movemos la cámara según hacia dónde mira (sin subir ni bajar).
     controles.moveForward(adelante * distancia);
     controles.moveRight(derecha * distancia);
+    const dx = posicion.x - anteriorX;
+    const dz = posicion.z - anteriorZ;
+    posicion.x = anteriorX;
+    posicion.z = anteriorZ;
+    desplazar(dx, dz);
 
-    // --- Límites del predio ---
-    // Si se pasa del borde, lo dejamos justo en el borde.
-    const limite = opciones.limitePredio - RADIO_JUGADOR;
-    posicion.x = Math.min(Math.max(posicion.x, -limite), limite);
-    posicion.z = Math.min(Math.max(posicion.z, -limite), limite);
-
-    // --- Colisiones ---
-    // Revisamos cada eje por separado: si al moverse en X choca, deshacemos solo X.
-    // Así, al caminar en diagonal contra una pared, el jugador "se desliza" a lo largo
-    // de ella en vez de quedarse trabado.
-    const nuevaX = posicion.x;
-    const nuevaZ = posicion.z;
-    if (chocaConAlgo(nuevaX, anteriorZ)) {
-      posicion.x = anteriorX;
-    }
-    if (chocaConAlgo(posicion.x, nuevaZ)) {
-      posicion.z = anteriorZ;
-    }
-
-    // La altura siempre queda fija a la altura de los ojos.
-    posicion.y = ALTURA_OJOS;
+    // La altura de los ojos (y el salto) la maneja acciones.js.
   }
 
-  return { controles, actualizar };
+  return { controles, actualizar, desplazar };
 }

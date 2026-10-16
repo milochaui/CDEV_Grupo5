@@ -112,7 +112,8 @@ function alAzar(lista) {
  * de z = 0 y el fondo hacia +Z. Hay que ubicarlo en el frente de la tarima (ver escenario.js).
  *
  * @param {object} musica  La música del escenario (ver crearMusica en musica.js)
- * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void }}
+ * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void,
+ *             contagiar: Function, contarPersonasCerca: Function }}
  */
 export function crearPublico(musica) {
   const grupo = new THREE.Group();
@@ -200,6 +201,57 @@ export function crearPublico(musica) {
   let promedioGraves = 0; // cómo vienen sonando los graves últimamente
   let ultimoGolpe = -100; // momento del último golpe detectado
 
+  // --- Contagio del jugador ---
+  // Lo manda acciones.js en cada cuadro con contagiar(). La gente cerca del jugador
+  // suma euforia extra, más cuanto más cerca está.
+  const jugadorLocal = new THREE.Vector3(); // posición del jugador medida desde el público
+  let extraEuforia = 0; // euforia que suma alguien pegado al jugador
+  let radioContagio = 1; // metros: más lejos que esto no hay contagio
+  let multiplicadorSaltoCerca = 1; // con pogo, los de al lado saltan más alto
+
+  // Pasa una posición del predio a coordenadas del público (medida desde la valla,
+  // con el escenario hacia -Z), que es como guardamos x y z de cada persona.
+  // worldToLocal deshace el movimiento y el giro del escenario.
+  function aCoordenadasDelPublico(posicionMundo, resultado) {
+    resultado.copy(posicionMundo);
+    grupo.worldToLocal(resultado);
+    return resultado;
+  }
+
+  /**
+   * Guarda el contagio del jugador para los próximos cuadros (ver acciones.js).
+   * @param {THREE.Vector3} posicionMundo  Dónde está el jugador en el predio
+   * @param {number} extra  Euforia que suma la gente pegada al jugador
+   * @param {number} radio  Metros alrededor del jugador a los que llega el contagio
+   * @param {number} multiplicadorSalto  Cuánto más alto saltan los de al lado (1 = igual)
+   */
+  function contagiar(posicionMundo, extra, radio, multiplicadorSalto) {
+    aCoordenadasDelPublico(posicionMundo, jugadorLocal);
+    extraEuforia = extra;
+    radioContagio = radio;
+    multiplicadorSaltoCerca = multiplicadorSalto;
+  }
+
+  const posicionConsulta = new THREE.Vector3(); // la reusa contarPersonasCerca
+
+  /**
+   * Cuenta cuántas personas hay a menos de "radio" metros de una posición del predio.
+   * La usa el pogo para saber si el jugador está metido entre la gente.
+   * @param {THREE.Vector3} posicionMundo
+   * @param {number} radio  Metros
+   * @returns {number}
+   */
+  function contarPersonasCerca(posicionMundo, radio) {
+    aCoordenadasDelPublico(posicionMundo, posicionConsulta);
+    let cantidad = 0;
+    for (const persona of personas) {
+      if (Math.hypot(persona.x - posicionConsulta.x, persona.z - posicionConsulta.z) < radio) {
+        cantidad++;
+      }
+    }
+    return cantidad;
+  }
+
   /**
    * Mueve al público. Se llama en cada cuadro de la animación (ver main.js).
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
@@ -218,12 +270,6 @@ export function crearPublico(musica) {
     } else {
       euforia = Math.max(objetivo, euforia - paso);
     }
-
-    // Valores de este momento, entre "tranquilos" y "euforia".
-    const proporcionSaltan = mezclar(PROPORCION_SALTAN_TRANQUI, PROPORCION_SALTAN_EUFORIA, euforia);
-    const proporcionBrazos = mezclar(PROPORCION_BRAZOS_ARRIBA_TRANQUI, PROPORCION_BRAZOS_ARRIBA_EUFORIA, euforia);
-    const alturaSalto = mezclar(ALTURA_SALTO_TRANQUI, ALTURA_SALTO_EUFORIA, euforia);
-    const balanceo = mezclar(BALANCEO_TRANQUI, BALANCEO_EUFORIA, euforia);
 
     // --- 2. ¿Hubo un golpe grave? ---
     // Un golpe es cuando los graves suben de repente por encima de cómo venían sonando.
@@ -245,6 +291,25 @@ export function crearPublico(musica) {
     // --- 3. Cada persona ---
     for (let i = 0; i < personas.length; i++) {
       const persona = personas[i];
+
+      // Contagio: cercanía al jugador, de 1 (pegado) a 0 (en el borde del radio o más lejos).
+      const distanciaJugador = Math.hypot(persona.x - jugadorLocal.x, persona.z - jugadorLocal.z);
+      const cercania = Math.max(0, 1 - distanciaJugador / radioContagio);
+      // Euforia propia de esta persona: la del tema más el contagio.
+      // Puede pasar de 1: así, aun con un tema conocido (euforia ya en 1), los que
+      // están cerca del jugador se ponen más eufóricos que el resto.
+      const euforiaPersona = euforia + extraEuforia * cercania;
+
+      // Valores de esta persona, entre "tranquilos" y "euforia".
+      // Con euforiaPersona mayor que 1, mezclar se pasa un poco de los valores de euforia
+      // (salta más alto, más brazos arriba).
+      const proporcionSaltan = mezclar(PROPORCION_SALTAN_TRANQUI, PROPORCION_SALTAN_EUFORIA, euforiaPersona);
+      const proporcionBrazos = mezclar(PROPORCION_BRAZOS_ARRIBA_TRANQUI, PROPORCION_BRAZOS_ARRIBA_EUFORIA, euforiaPersona);
+      const alturaSalto =
+        mezclar(ALTURA_SALTO_TRANQUI, ALTURA_SALTO_EUFORIA, euforiaPersona) *
+        mezclar(1, multiplicadorSaltoCerca, cercania); // con pogo, los de al lado saltan más
+      // El balanceo baja con la euforia; Math.max evita que dé negativo.
+      const balanceo = Math.max(0, mezclar(BALANCEO_TRANQUI, BALANCEO_EUFORIA, euforiaPersona));
 
       // Saltos: con cada golpe, los que saltan (y no están en el aire) arrancan un salto,
       // cada uno con su pequeño retraso: así no saltan todos exactamente juntos.
@@ -308,5 +373,5 @@ export function crearPublico(musica) {
   // Lo llamamos una vez para que la gente aparezca en su lugar antes del primer cuadro.
   actualizar(0);
 
-  return { grupo, actualizar };
+  return { grupo, actualizar, contagiar, contarPersonasCerca };
 }
