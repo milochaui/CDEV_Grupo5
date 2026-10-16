@@ -76,20 +76,39 @@
         border-radius: 4px;
         pointer-events: none;
       }
+
+      /* Aviso de silencio: un cartelito chico arriba a la derecha */
+      #aviso-silencio {
+        display: none; /* se muestra solo cuando el sonido está silenciado */
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        padding: 6px 12px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        border-radius: 4px;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
     <!-- Cartel de inicio. Al hacer clic se captura el mouse y empieza el juego -->
     <div id="pantalla-inicio">
-      <h1>Simulador de Festival</h1>
+      <h1 id="titulo-cartel">Simulador de Festival</h1>
       <ul>
         <li><b>Mouse</b>: mirar alrededor</li>
         <li><b>W A S D</b> o <b>flechas</b>: caminar</li>
         <li><b>Shift</b>: correr</li>
-        <li><b>Esc</b>: pausa (vuelve a este cartel)</li>
+        <li><b>Esc</b> o <b>P</b>: pausa (vuelve a este cartel)</li>
+        <li><b>M</b>: silenciar / activar el sonido</li>
       </ul>
-      <p class="entrar">Hacé clic para entrar</p>
+      <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
     </div>
+
+    <!-- Aviso de sonido silenciado (aparece con la tecla M) -->
+    <div id="aviso-silencio">🔇 Silenciado (M para activar)</div>
 
     <!-- Mira en el centro de la pantalla -->
     <div id="mira"></div>

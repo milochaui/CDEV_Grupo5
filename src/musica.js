@@ -47,7 +47,8 @@ function volumenSegunDistancia(distancia) {
  *
  * @param {THREE.AudioListener} oyente  Los "oídos" del jugador (van pegados a la cámara)
  * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} temas  Lista de temas en orden
- * @returns {{ sonido: THREE.PositionalAudio, arrancar: () => void, temaActual: () => object,
+ * @returns {{ sonido: THREE.PositionalAudio, arrancar: () => void, pausar: () => void,
+ *             reanudar: () => void, temaActual: () => object,
  *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number,
  *             estaSonando: () => boolean, graves: () => number }}
  */
@@ -117,6 +118,19 @@ export function crearMusica(oyente, temas) {
     reproducirTemaActual();
   }
 
+  // Pausa el tema. El <audio> se acuerda en qué segundo quedó.
+  function pausar() {
+    elemento.pause();
+  }
+
+  // Sigue el tema desde donde quedó. Si ya está sonando no hace nada
+  // (así no lo "reiniciamos" sin querer).
+  function reanudar() {
+    if (elemento.paused) {
+      elemento.play();
+    }
+  }
+
   // Devuelve el tema que está sonando ahora: { archivo, titulo, conocido }
   function temaActual() {
     return temas[indice];
@@ -158,5 +172,7 @@ export function crearMusica(oyente, temas) {
     return volumenActual;
   }
 
-  return { sonido, arrancar, temaActual, actualizarVolumen, volumen, estaSonando, graves };
+  return {
+    sonido, arrancar, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
+  };
 }

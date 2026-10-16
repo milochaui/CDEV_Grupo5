@@ -35,11 +35,6 @@ camara.lookAt(0, 7, -98);
 const oyente = new THREE.AudioListener();
 camara.add(oyente);
 
-// Volumen general: normal mientras se juega, muy bajo en pausa (como taparse los oídos).
-const VOLUMEN_NORMAL = 1;
-const VOLUMEN_PAUSA = 0.08;
-// Arrancamos "tapados": el volumen normal vuelve recién cuando se captura el mouse.
-oyente.setMasterVolume(VOLUMEN_PAUSA);
 
 // --- Renderer ---
 // El renderer es el que "dibuja" la escena vista desde la cámara en un <canvas>.
@@ -135,8 +130,12 @@ const jugador = crearJugador(camara, document.body, {
   limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
 });
 
-// --- Pantalla de inicio y mira ---
+// --- Pantalla de inicio, pausa y mira ---
+// El mismo cartel sirve de pantalla de inicio y de pantalla de pausa:
+// solo le cambiamos el título y el texto de abajo.
 const pantallaInicio = document.getElementById('pantalla-inicio');
+const tituloCartel = document.getElementById('titulo-cartel');
+const textoClic = document.getElementById('texto-clic');
 const mira = document.getElementById('mira');
 
 // Para no reiniciar la música en cada clic: solo arranca la primera vez.
@@ -158,19 +157,50 @@ pantallaInicio.addEventListener('click', () => {
   }
 });
 
-// Mouse capturado: escondemos el cartel, mostramos la mira y volvemos al volumen normal.
+// Mouse capturado: se juega. Escondemos el cartel, mostramos la mira y la música
+// de los tres escenarios sigue desde donde quedó.
+// (La primera vez la música ya arrancó con el clic, y reanudar() no hace nada.)
 jugador.controles.addEventListener('lock', () => {
   pantallaInicio.style.display = 'none';
   mira.style.display = 'block';
-  oyente.setMasterVolume(VOLUMEN_NORMAL);
+  if (musicaArrancada) {
+    for (const escenario of escenarios) {
+      escenario.userData.musica.reanudar();
+    }
+  }
 });
 
-// Mouse liberado (por ejemplo, con Esc): vuelve el cartel, se esconde la mira
-// y la música baja mucho, pero sin cortarse.
+// Mouse liberado (con Esc o con la tecla P): pausa. Se detiene la música de los
+// tres escenarios y vuelve el cartel, ahora como cartel de pausa.
+// El público se congela solo: en el bucle de animación no lo movemos si hay pausa.
 jugador.controles.addEventListener('unlock', () => {
   pantallaInicio.style.display = 'flex';
   mira.style.display = 'none';
-  oyente.setMasterVolume(VOLUMEN_PAUSA);
+  tituloCartel.textContent = 'Pausa';
+  textoClic.textContent = 'Hacé clic para continuar';
+  for (const escenario of escenarios) {
+    escenario.userData.musica.pausar();
+  }
+});
+
+// --- Teclas P (pausa) y M (silencio) ---
+const avisoSilencio = document.getElementById('aviso-silencio');
+let silenciado = false;
+
+document.addEventListener('keydown', (event) => {
+  // P: pausa. Con Esc el navegador suelta el mouse solo; con P lo soltamos nosotros.
+  // Al soltarlo se dispara el evento 'unlock' de arriba, que hace toda la pausa.
+  if (event.code === 'KeyP' && jugador.controles.isLocked) {
+    jugador.controles.unlock();
+  }
+
+  // M: silenciar o activar el sonido, sin pausar (la música sigue avanzando).
+  // setMasterVolume cambia el volumen general de los "oídos" del jugador: 0 = mudo.
+  if (event.code === 'KeyM') {
+    silenciado = !silenciado; // ! da vuelta el valor: true pasa a false y al revés
+    oyente.setMasterVolume(silenciado ? 0 : 1);
+    avisoSilencio.style.display = silenciado ? 'block' : 'none';
+  }
 });
 
 // --- Indicador del tema que suena ---
@@ -227,10 +257,14 @@ function animar(tiempo) {
 
   jugador.actualizar(delta);
   // El volumen de cada banda depende de dónde quedó parado el jugador.
-  // Y cada público reacciona a la música de su escenario.
+  // Y cada público reacciona a la música de su escenario, salvo en pausa:
+  // si el mouse no está capturado no lo actualizamos y queda congelado.
+  const enPausa = !jugador.controles.isLocked;
   for (const escenario of escenarios) {
     escenario.userData.musica.actualizarVolumen(camara.position);
-    escenario.userData.publico.actualizar(delta);
+    if (!enPausa) {
+      escenario.userData.publico.actualizar(delta);
+    }
   }
   actualizarIndicador();
   renderer.render(escena, camara);
