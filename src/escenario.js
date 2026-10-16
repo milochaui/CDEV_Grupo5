@@ -2,6 +2,7 @@
 // La función crearEscenario(config) se puede usar varias veces para armar
 // distintos escenarios, cada uno con su banda, su color y su posición.
 import * as THREE from 'three';
+import { crearMusica } from './musica.js';
 
 // --- Medidas del escenario, en metros ---
 const ANCHO = 24; // de izquierda a derecha
@@ -21,9 +22,15 @@ const GROSOR_VIGA = 0.6;
  * @param {string} config.nombre    Nombre de la banda (se muestra en el cartel)
  * @param {number} config.color     Color principal en hexadecimal, por ejemplo 0xff3355
  * @param {{x: number, z: number}} config.posicion  Lugar del predio donde va el escenario
+ * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} config.temas
+ *        Temas que toca la banda, en orden (archivo = nombre del mp3 en public/audio)
+ * @param {THREE.AudioListener} config.oyente  Los "oídos" del jugador
  *
- * Además, en escenario.userData.colisiones deja la lista de zonas sólidas
- * (tarima y torres de parlantes) que el jugador no puede atravesar.
+ * Además, en escenario.userData deja:
+ *  - colisiones: la lista de zonas sólidas (tarima y torres de parlantes)
+ *    que el jugador no puede atravesar.
+ *  - musica: la música del escenario. Por ejemplo, musica.temaActual().conocido
+ *    dice si el tema que suena ahora es conocido.
  */
 export function crearEscenario(config) {
   const escenario = new THREE.Group();
@@ -48,6 +55,13 @@ export function crearEscenario(config) {
   crearReflectores(escenario, materiales, config.color);
   crearLuces(escenario, config.color);
   crearCartel(escenario, config.nombre, config.color);
+
+  // Música: el sonido sale del frente del escenario, a la altura de los parlantes.
+  // Como es parte del grupo, se mueve junto con el escenario.
+  const musica = crearMusica(config.oyente, config.temas);
+  musica.sonido.position.set(0, 4, PROFUNDIDAD / 2);
+  escenario.add(musica.sonido);
+  escenario.userData.musica = musica;
 
   // Movemos todo el grupo al lugar del predio indicado.
   escenario.position.set(config.posicion.x, 0, config.posicion.z);

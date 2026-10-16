@@ -29,6 +29,18 @@ const camara = new THREE.PerspectiveCamera(
 camara.position.set(-60, 1.7, -10);
 camara.lookAt(-60, 7, -40);
 
+// --- Sonido ---
+// El AudioListener son los "oídos" del jugador. Lo pegamos a la cámara para que
+// se mueva y gire con ella: así el sonido cambia según dónde estamos y hacia dónde miramos.
+const oyente = new THREE.AudioListener();
+camara.add(oyente);
+
+// Volumen general: normal mientras se juega, muy bajo en pausa (como taparse los oídos).
+const VOLUMEN_NORMAL = 1;
+const VOLUMEN_PAUSA = 0.08;
+// Arrancamos "tapados": el volumen normal vuelve recién cuando se captura el mouse.
+oyente.setMasterVolume(VOLUMEN_PAUSA);
+
 // --- Renderer ---
 // El renderer es el que "dibuja" la escena vista desde la cámara en un <canvas>.
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -68,6 +80,12 @@ const escenario1 = crearEscenario({
   nombre: 'Ciro y los Persas',
   color: 0xff3355,
   posicion: { x: -60, z: -40 },
+  // Los temas suenan en este orden y al terminar la lista vuelve a empezar.
+  temas: [
+    { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
+    { archivo: 'ciro_tranqui_servidor.mp3', titulo: 'Servidor', conocido: false },
+  ],
+  oyente: oyente,
 });
 escena.add(escenario1);
 
@@ -82,22 +100,61 @@ const jugador = crearJugador(camara, document.body, {
 const pantallaInicio = document.getElementById('pantalla-inicio');
 const mira = document.getElementById('mira');
 
+// Para no reiniciar la música en cada clic: solo arranca la primera vez.
+let musicaArrancada = false;
+
 // Al hacer clic en el cartel capturamos el mouse y empieza el juego.
 pantallaInicio.addEventListener('click', () => {
   jugador.controles.lock();
+
+  // Los navegadores no dejan reproducir sonido hasta que el usuario interactúa con
+  // la página. Por eso la música arranca acá, con este primer clic.
+  if (!musicaArrancada) {
+    oyente.context.resume(); // el sonido del navegador empieza "suspendido"
+    escenario1.userData.musica.arrancar();
+    musicaArrancada = true;
+  }
 });
 
-// Mouse capturado: escondemos el cartel y mostramos la mira.
+// Mouse capturado: escondemos el cartel, mostramos la mira y volvemos al volumen normal.
 jugador.controles.addEventListener('lock', () => {
   pantallaInicio.style.display = 'none';
   mira.style.display = 'block';
+  oyente.setMasterVolume(VOLUMEN_NORMAL);
 });
 
-// Mouse liberado (por ejemplo, con Esc): vuelve el cartel y se esconde la mira.
+// Mouse liberado (por ejemplo, con Esc): vuelve el cartel, se esconde la mira
+// y la música baja mucho, pero sin cortarse.
 jugador.controles.addEventListener('unlock', () => {
   pantallaInicio.style.display = 'flex';
   mira.style.display = 'none';
+  oyente.setMasterVolume(VOLUMEN_PAUSA);
 });
+
+// --- Indicador del tema que suena ---
+// Solo aparece cuando estamos lo bastante cerca del escenario para escucharlo bien
+// (a 60 m el volumen ya bajó a un 25 % aproximadamente).
+const indicadorTema = document.getElementById('tema-actual');
+const DISTANCIA_INDICADOR = 60; // metros
+const posicionParlante = new THREE.Vector3(); // lo reusamos en cada cuadro
+
+function actualizarIndicador() {
+  const musica = escenario1.userData.musica;
+  // getWorldPosition nos da la posición del parlante en coordenadas del predio.
+  musica.sonido.getWorldPosition(posicionParlante);
+  const distancia = camara.position.distanceTo(posicionParlante);
+
+  let texto = '';
+  if (musicaArrancada && distancia < DISTANCIA_INDICADOR) {
+    texto = '♪ Ciro y los Persas — ' + musica.temaActual().titulo;
+  }
+
+  // Solo tocamos la página si el texto cambió (cambiarla en cada cuadro es trabajo de más).
+  if (indicadorTema.textContent !== texto) {
+    indicadorTema.textContent = texto;
+    indicadorTema.style.display = texto ? 'block' : 'none';
+  }
+}
 
 // --- Ajuste al cambiar el tamaño de la ventana ---
 window.addEventListener('resize', () => {
@@ -121,6 +178,7 @@ function animar(tiempo) {
   const delta = Math.min(timer.getDelta(), 0.1);
 
   jugador.actualizar(delta);
+  actualizarIndicador();
   renderer.render(escena, camara);
 }
 requestAnimationFrame(animar);

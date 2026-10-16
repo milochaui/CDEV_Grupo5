@@ -61,6 +61,21 @@
         border-radius: 50%;
         pointer-events: none; /* que no moleste a los clics */
       }
+
+      /* Indicador del tema que suena: un cartelito abajo a la izquierda */
+      #tema-actual {
+        display: none; /* se muestra solo cerca de un escenario */
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        padding: 6px 12px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        border-radius: 4px;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -78,6 +93,9 @@
 
     <!-- Mira en el centro de la pantalla -->
     <div id="mira"></div>
+
+    <!-- Tema que está sonando (lo completa main.js) -->
+    <div id="tema-actual"></div>
 
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>
