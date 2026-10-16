@@ -15,9 +15,70 @@
       canvas {
         display: block;
       }
+
+      /* Pantalla de inicio: un cartel que tapa toda la escena con un fondo semitransparente */
+      #pantalla-inicio {
+        position: fixed;
+        inset: 0; /* ocupa toda la ventana */
+        display: flex; /* flex para centrar el contenido */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        cursor: pointer;
+      }
+      #pantalla-inicio h1 {
+        font-size: 48px;
+        margin: 0 0 24px;
+      }
+      #pantalla-inicio ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 32px;
+        font-size: 18px;
+        line-height: 1.8;
+      }
+      #pantalla-inicio .entrar {
+        font-size: 24px;
+        font-weight: bold;
+        color: #ff3355;
+      }
+
+      /* Mira: un puntito blanco con borde negro en el centro exacto de la pantalla */
+      #mira {
+        display: none; /* se muestra recién cuando empieza el juego */
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 6px;
+        height: 6px;
+        transform: translate(-50%, -50%); /* centra el punto sobre su propio medio */
+        background: #fff;
+        border: 1px solid #000;
+        border-radius: 50%;
+        pointer-events: none; /* que no moleste a los clics */
+      }
     </style>
   </head>
   <body>
+    <!-- Cartel de inicio. Al hacer clic se captura el mouse y empieza el juego -->
+    <div id="pantalla-inicio">
+      <h1>Simulador de Festival</h1>
+      <ul>
+        <li><b>Mouse</b>: mirar alrededor</li>
+        <li><b>W A S D</b> o <b>flechas</b>: caminar</li>
+        <li><b>Shift</b>: correr</li>
+        <li><b>Esc</b>: pausa (vuelve a este cartel)</li>
+      </ul>
+      <p class="entrar">Hacé clic para entrar</p>
+    </div>
+
+    <!-- Mira en el centro de la pantalla -->
+    <div id="mira"></div>
+
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>
   </body>

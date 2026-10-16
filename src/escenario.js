@@ -21,9 +21,16 @@ const GROSOR_VIGA = 0.6;
  * @param {string} config.nombre    Nombre de la banda (se muestra en el cartel)
  * @param {number} config.color     Color principal en hexadecimal, por ejemplo 0xff3355
  * @param {{x: number, z: number}} config.posicion  Lugar del predio donde va el escenario
+ *
+ * Además, en escenario.userData.colisiones deja la lista de zonas sólidas
+ * (tarima y torres de parlantes) que el jugador no puede atravesar.
  */
 export function crearEscenario(config) {
   const escenario = new THREE.Group();
+
+  // userData es un objeto libre que Three.js nos deja usar para guardar datos propios.
+  // Acá vamos juntando las cajas de colisión a medida que creamos las partes.
+  escenario.userData.colisiones = [];
 
   // Materiales compartidos: los creamos una sola vez y los reusamos en varias partes.
   // Así el navegador tiene menos trabajo (mejor rendimiento).
@@ -44,7 +51,28 @@ export function crearEscenario(config) {
 
   // Movemos todo el grupo al lugar del predio indicado.
   escenario.position.set(config.posicion.x, 0, config.posicion.z);
+
+  // Las cajas de colisión se calcularon con el escenario en el origen (0, 0).
+  // Les sumamos la posición para que queden en coordenadas del predio.
+  for (const caja of escenario.userData.colisiones) {
+    caja.minX += config.posicion.x;
+    caja.maxX += config.posicion.x;
+    caja.minZ += config.posicion.z;
+    caja.maxZ += config.posicion.z;
+  }
   return escenario;
+}
+
+// Guarda una caja de colisión vista "desde arriba" (un rectángulo en el piso).
+// Como el jugador siempre camina por el piso, no hace falta tener en cuenta la altura.
+// (x, z) es el centro del rectángulo.
+function agregarColision(escenario, x, z, ancho, profundidad) {
+  escenario.userData.colisiones.push({
+    minX: x - ancho / 2,
+    maxX: x + ancho / 2,
+    minZ: z - profundidad / 2,
+    maxZ: z + profundidad / 2,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +90,10 @@ function crearTarima(escenario, materiales) {
   // para que la caja quede apoyada sobre el piso.
   tarima.position.y = ALTO_TARIMA / 2;
   escenario.add(tarima);
+
+  // La tarima es sólida. Le sumamos el grosor de las columnas de las esquinas
+  // (que sobresalen un poco) para que tampoco se puedan atravesar.
+  agregarColision(escenario, 0, 0, ANCHO + 0.6, PROFUNDIDAD + 0.6);
 }
 
 // Estructura metálica: 4 columnas en las esquinas y travesaños arriba formando un marco.
@@ -139,6 +171,9 @@ function crearTorresDeParlantes(escenario, materiales) {
   for (const lado of [-1, 1]) {
     const x = lado * (ANCHO / 2 + anchoCaja / 2 + 1);
     const z = PROFUNDIDAD / 2 - anchoCaja / 2;
+
+    // Toda la torre es sólida: una sola caja de colisión alcanza.
+    agregarColision(escenario, x, z, anchoCaja, anchoCaja);
 
     for (let i = 0; i < cajasPorTorre; i++) {
       // Apilamos las cajas una arriba de la otra (con 0.1 m de separación).

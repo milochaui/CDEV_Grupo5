@@ -2,6 +2,7 @@
 // Arma la escena: predio, cielo de noche, iluminación, cámara y el primer escenario.
 import * as THREE from 'three';
 import { crearEscenario } from './escenario.js';
+import { crearJugador } from './jugador.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -22,8 +23,9 @@ const camara = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-// Cámara fija, como una persona parada en el público: a la altura de los ojos
-// (1.7 metros), unos 30 metros delante del escenario 1, mirando hacia la pantalla.
+// Posición inicial del jugador: parado en el público, unos 30 metros delante
+// del escenario 1, mirando hacia la pantalla. La altura (1.7 m, los ojos de
+// una persona) la fija el jugador en jugador.js.
 camara.position.set(-60, 1.7, -10);
 camara.lookAt(-60, 7, -40);
 
@@ -51,7 +53,8 @@ escena.add(luzLuna);
 
 // --- Piso (el predio) ---
 // Un plano de 500 x 500 metros.
-const geometriaPiso = new THREE.PlaneGeometry(500, 500);
+const TAMANO_PREDIO = 500;
+const geometriaPiso = new THREE.PlaneGeometry(TAMANO_PREDIO, TAMANO_PREDIO);
 const materialPiso = new THREE.MeshStandardMaterial({ color: 0x2e7d32 }); // verde pasto
 const piso = new THREE.Mesh(geometriaPiso, materialPiso);
 // Los planos se crean "parados" (verticales); lo rotamos 90° para que quede acostado.
@@ -68,6 +71,34 @@ const escenario1 = crearEscenario({
 });
 escena.add(escenario1);
 
+// --- Jugador ---
+// Le pasamos las zonas sólidas de los escenarios y el borde del predio.
+const jugador = crearJugador(camara, document.body, {
+  colisiones: [...escenario1.userData.colisiones],
+  limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
+});
+
+// --- Pantalla de inicio y mira ---
+const pantallaInicio = document.getElementById('pantalla-inicio');
+const mira = document.getElementById('mira');
+
+// Al hacer clic en el cartel capturamos el mouse y empieza el juego.
+pantallaInicio.addEventListener('click', () => {
+  jugador.controles.lock();
+});
+
+// Mouse capturado: escondemos el cartel y mostramos la mira.
+jugador.controles.addEventListener('lock', () => {
+  pantallaInicio.style.display = 'none';
+  mira.style.display = 'block';
+});
+
+// Mouse liberado (por ejemplo, con Esc): vuelve el cartel y se esconde la mira.
+jugador.controles.addEventListener('unlock', () => {
+  pantallaInicio.style.display = 'flex';
+  mira.style.display = 'none';
+});
+
 // --- Ajuste al cambiar el tamaño de la ventana ---
 window.addEventListener('resize', () => {
   camara.aspect = window.innerWidth / window.innerHeight;
@@ -76,9 +107,20 @@ window.addEventListener('resize', () => {
 });
 
 // --- Bucle de animación ---
-// Se ejecuta unas 60 veces por segundo y vuelve a dibujar la escena.
-function animar() {
+// Se ejecuta unas 60 veces por segundo: mueve al jugador y vuelve a dibujar la escena.
+
+// El Timer mide cuánto tiempo pasa entre un cuadro y el siguiente.
+const timer = new THREE.Timer();
+
+function animar(tiempo) {
   requestAnimationFrame(animar);
+
+  timer.update(tiempo);
+  // Segundos desde el cuadro anterior. Lo limitamos a 0.1 s: si la pestaña estuvo
+  // en segundo plano, el delta sería enorme y el jugador "saltaría" de golpe.
+  const delta = Math.min(timer.getDelta(), 0.1);
+
+  jugador.actualizar(delta);
   renderer.render(escena, camara);
 }
-animar();
+requestAnimationFrame(animar);
