@@ -4,7 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simulador de Festival</title>
+
+    <!-- Tipografías de Google Fonts: Bebas Neue (títulos, estilo afiche) y Barlow (textos).
+         Si no hay internet, se usan las de la compu (Arial). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Bebas+Neue&display=swap"
+      rel="stylesheet"
+    />
+
     <style>
+      /* Colores y medidas que se repiten: los definimos una vez como "variables" de CSS */
+      :root {
+        --vidrio: rgba(12, 8, 30, 0.55); /* fondo de los carteles: oscuro y semitransparente */
+        --borde: rgba(255, 255, 255, 0.14);
+        --texto-suave: rgba(255, 255, 255, 0.7);
+        --rojo: #ff3355; /* Ciro y los Persas */
+        --ambar: #ff9900; /* Las Pastillas del Abuelo */
+        --celeste: #33aaff; /* Andrés Calamaro */
+        --dorado: #ffcc33;
+        --fuente-titulo: 'Bebas Neue', Impact, Arial, sans-serif;
+        --fuente-texto: 'Barlow', Arial, sans-serif;
+      }
+
       /* Sacamos márgenes y barras de scroll para que el 3D ocupe toda la ventana */
       html, body {
         margin: 0;
@@ -16,7 +39,26 @@
         display: block;
       }
 
-      /* Pantalla de inicio: un cartel que tapa toda la escena con un fondo semitransparente */
+      /* Estilo común de los carteles del juego: "vidrio" oscuro con el fondo desenfocado.
+         backdrop-filter desenfoca lo que hay detrás del cartel (la escena 3D). */
+      .cartel {
+        position: fixed;
+        padding: 8px 16px;
+        background: var(--vidrio);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px); /* lo mismo, para Safari */
+        border: 1px solid var(--borde);
+        border-radius: 999px; /* bordes bien redondeados: forma de "pastilla" */
+        color: #fff;
+        font-family: var(--fuente-texto);
+        font-size: 15px;
+        pointer-events: none; /* que no molesten a los clics */
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Pantalla de inicio (y de pausa): un afiche de festival               */
+      /* ------------------------------------------------------------------ */
       #pantalla-inicio {
         position: fixed;
         inset: 0; /* ocupa toda la ventana */
@@ -24,30 +66,105 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: rgba(0, 0, 0, 0.7);
+        /* Oscurecemos más los bordes que el centro, como una viñeta de foto */
+        background: radial-gradient(ellipse at center, rgba(10, 5, 30, 0.45), rgba(5, 0, 15, 0.9));
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
         color: #fff;
-        font-family: Arial, sans-serif;
+        font-family: var(--fuente-texto);
         text-align: center;
         cursor: pointer;
       }
+      .volanta {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 6px;
+        text-transform: uppercase;
+        color: var(--texto-suave);
+      }
       #pantalla-inicio h1 {
-        font-size: 48px;
-        margin: 0 0 24px;
+        margin: 4px 0 6px;
+        font-family: var(--fuente-titulo);
+        font-weight: normal;
+        font-size: clamp(56px, 10vw, 120px); /* grande, pero se achica en pantallas chicas */
+        line-height: 0.95;
+        letter-spacing: 3px;
+        /* Texto con degradé de atardecer: pintamos el fondo y lo "recortamos" con la forma de las letras */
+        background: linear-gradient(90deg, var(--dorado), var(--rojo) 55%, #b44bff);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 4px 24px rgba(255, 51, 85, 0.35));
       }
-      #pantalla-inicio ul {
-        list-style: none;
-        padding: 0;
+      /* El lineup: las tres bandas con su color */
+      .lineup {
+        margin: 0 0 28px;
+        font-family: var(--fuente-titulo);
+        font-size: clamp(20px, 3vw, 30px);
+        letter-spacing: 2px;
+      }
+      .lineup span {
+        margin: 0 8px;
+      }
+      .lineup .estrella {
+        color: var(--texto-suave);
+        margin: 0;
+      }
+      /* Controles en dos columnas */
+      .controles {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 8px 36px;
         margin: 0 0 32px;
-        font-size: 18px;
-        line-height: 1.8;
+        padding: 20px 28px;
+        background: var(--vidrio);
+        border: 1px solid var(--borde);
+        border-radius: 16px;
+        text-align: left;
+        font-size: 15px;
+        color: var(--texto-suave);
       }
-      #pantalla-inicio .entrar {
-        font-size: 24px;
-        font-weight: bold;
-        color: #ff3355;
+      .controles div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      /* Las teclas, dibujadas como teclas de teclado */
+      kbd {
+        display: inline-block;
+        min-width: 14px;
+        padding: 2px 7px;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-bottom-width: 3px; /* borde más grueso abajo: parece una tecla en relieve */
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font-family: var(--fuente-texto);
+        font-size: 13px;
+        font-weight: 700;
+        text-align: center;
+      }
+      /* El botón de entrar, que "respira" para invitar a hacer clic */
+      .entrar {
+        margin: 0;
+        padding: 14px 40px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--rojo), #ff7a33);
+        font-family: var(--fuente-titulo);
+        font-size: 28px;
+        letter-spacing: 3px;
+        animation: respirar 1.6s ease-in-out infinite;
+      }
+      @keyframes respirar {
+        0%, 100% { box-shadow: 0 0 12px rgba(255, 51, 85, 0.4); transform: scale(1); }
+        50% { box-shadow: 0 0 36px rgba(255, 51, 85, 0.9); transform: scale(1.04); }
       }
 
-      /* Mira: un puntito blanco con borde negro en el centro exacto de la pantalla */
+      /* ------------------------------------------------------------------ */
+      /* HUD: lo que se ve mientras se juega                                  */
+      /* ------------------------------------------------------------------ */
+
+      /* Mira: un puntito blanco con una sombra suave en el centro exacto de la pantalla */
       #mira {
         display: none; /* se muestra recién cuando empieza el juego */
         position: fixed;
@@ -57,128 +174,95 @@
         height: 6px;
         transform: translate(-50%, -50%); /* centra el punto sobre su propio medio */
         background: #fff;
-        border: 1px solid #000;
         border-radius: 50%;
-        pointer-events: none; /* que no moleste a los clics */
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 8px rgba(255, 255, 255, 0.6);
+        pointer-events: none;
       }
 
-      /* Indicador del tema que suena: un cartelito abajo a la izquierda */
+      /* Tema que suena: abajo a la izquierda, con una rayita del color de la banda.
+         main.js cambia --color-banda según la banda que más se escucha. */
       #tema-actual {
         display: none; /* se muestra solo cerca de un escenario */
-        position: fixed;
         left: 16px;
         bottom: 16px;
-        padding: 6px 12px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        border-radius: 4px;
-        pointer-events: none;
+        border-radius: 12px;
+        border-left: 4px solid var(--color-banda, var(--rojo));
+        font-weight: 600;
       }
 
-      /* Aviso de silencio: un cartelito chico arriba a la derecha */
+      /* Aviso de silencio: arriba a la derecha */
       #aviso-silencio {
         display: none; /* se muestra solo cuando el sonido está silenciado */
-        position: fixed;
         top: 16px;
         right: 16px;
-        padding: 6px 12px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        border-radius: 4px;
-        pointer-events: none;
       }
 
-      /* Indicador de acciones (cantando, pogo): arriba al centro */
+      /* Acciones (cantando, pogo): arriba al centro */
       #indicador-acciones {
         display: none; /* se muestra solo mientras hay una acción */
-        position: fixed;
         top: 16px;
         left: 50%;
         transform: translateX(-50%); /* centra el cartel sobre su propio medio */
-        padding: 6px 14px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        font-family: Arial, sans-serif;
-        font-size: 18px;
-        font-weight: bold;
-        border-radius: 4px;
-        pointer-events: none;
+        font-family: var(--fuente-titulo);
+        font-size: 24px;
+        letter-spacing: 2px;
         white-space: pre; /* respeta los espacios entre "Cantando" y "Pogo" */
       }
 
-      /* Aviso del pogo fuera del público: debajo de la mira */
-      #aviso-pogo {
-        display: none; /* se muestra solo si se aprieta F lejos de la gente */
-        position: fixed;
-        top: calc(50% + 40px);
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 6px 14px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #ffcc33;
-        font-family: Arial, sans-serif;
-        font-size: 16px;
-        border-radius: 4px;
-        pointer-events: none;
-      }
-
-      /* Aviso de la barra (pedir, tomar, comer): debajo del aviso del pogo */
+      /* Avisos debajo de la mira: el del pogo y, más abajo, el de la barra */
+      #aviso-pogo,
       #aviso-barra {
-        display: none; /* se muestra cerca de la barra o con algo en la mano */
-        position: fixed;
-        top: calc(50% + 80px);
+        display: none;
         left: 50%;
         transform: translateX(-50%);
-        padding: 6px 14px;
-        background: rgba(0, 0, 0, 0.6);
+        white-space: pre; /* respeta los espacios entre las dos opciones de la barra */
+      }
+      #aviso-pogo {
+        top: calc(50% + 40px);
+        color: var(--dorado);
+      }
+      #aviso-barra {
+        top: calc(50% + 84px);
         color: #ffd27a;
-        font-family: Arial, sans-serif;
-        font-size: 16px;
-        border-radius: 4px;
-        pointer-events: none;
-        white-space: pre; /* respeta los espacios entre las dos opciones */
       }
 
       /* Aguante-metro: abajo a la derecha (lo maneja aguante.js) */
       #aguante {
         display: none; /* se muestra cuando se juega, igual que la mira */
-        position: fixed;
         right: 16px;
         bottom: 16px;
-        width: 220px;
-        padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        font-family: Arial, sans-serif;
-        border-radius: 4px;
-        pointer-events: none;
+        width: 240px;
+        padding: 10px 16px 14px;
+        border-radius: 16px;
       }
       #aguante-texto {
         display: inline-block; /* para poder agrandarlo con transform */
-        margin-bottom: 6px;
-        font-size: 14px;
-        font-weight: bold;
-        letter-spacing: 1px;
+        margin-bottom: 8px;
+        font-family: var(--fuente-titulo);
+        font-size: 22px;
+        letter-spacing: 3px;
         transform-origin: left center; /* se agranda desde la izquierda */
       }
       #aguante-barra {
-        height: 12px;
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 6px;
+        height: 10px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
         overflow: hidden; /* que el relleno no se salga de los bordes redondeados */
       }
       #aguante-relleno {
         width: 0%; /* aguante.js le cambia el ancho */
         height: 100%;
-        background: linear-gradient(90deg, #ffcc33, #ff3355); /* de amarillo a rojo */
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--dorado), var(--rojo), #b44bff);
+        box-shadow: 0 0 12px rgba(255, 51, 85, 0.8); /* brillo */
       }
-      /* Barra llena: el texto se pone amarillo y "late" */
+      /* Barra llena: el texto se pone dorado y "late", y el cartel brilla */
+      #aguante.lleno {
+        border-color: rgba(255, 204, 51, 0.6);
+        box-shadow: 0 0 30px rgba(255, 204, 51, 0.45);
+      }
       #aguante.lleno #aguante-texto {
-        color: #ffcc33;
+        color: var(--dorado);
         animation: latido 0.4s infinite alternate;
       }
       @keyframes latido {
@@ -190,41 +274,48 @@
   <body>
     <!-- Cartel de inicio. Al hacer clic se captura el mouse y empieza el juego -->
     <div id="pantalla-inicio">
+      <div class="volanta">3 escenarios · 1 noche de rock</div>
       <h1 id="titulo-cartel">Simulador de Festival</h1>
-      <ul>
-        <li><b>Mouse</b>: mirar alrededor</li>
-        <li><b>W A S D</b> o <b>flechas</b>: caminar</li>
-        <li><b>Shift</b>: correr</li>
-        <li><b>Espacio</b>: saltar</li>
-        <li><b>E</b> (mantener): levantar los brazos</li>
-        <li><b>Q</b> (mantener): cantar</li>
-        <li><b>F</b> (mantener): pogo (metido entre el público)</li>
-        <li><b>Esc</b> o <b>P</b>: pausa (vuelve a este cartel)</li>
-        <li><b>M</b>: silenciar / activar el sonido</li>
-        <li><b>R</b> / <b>C</b> en la barra: pedir un fernet / un choripán (<b>clic</b> para tomar o comer)</li>
-        <li>Dejá todo cerca de un escenario para llenar el <b>aguante-metro</b></li>
-      </ul>
+      <p class="lineup">
+        <span style="color: var(--rojo)">Ciro y los Persas</span><span class="estrella">★</span
+        ><span style="color: var(--ambar)">Las Pastillas del Abuelo</span><span class="estrella">★</span
+        ><span style="color: var(--celeste)">Andrés Calamaro</span>
+      </p>
+      <div class="controles">
+        <div><kbd>Mouse</kbd> mirar alrededor</div>
+        <div><kbd>E</kbd> levantar los brazos (mantener)</div>
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> caminar</div>
+        <div><kbd>Q</kbd> cantar (mantener)</div>
+        <div><kbd>Shift</kbd> correr</div>
+        <div><kbd>F</kbd> pogo, metido entre el público (mantener)</div>
+        <div><kbd>Espacio</kbd> saltar</div>
+        <div><kbd>R</kbd><kbd>C</kbd> en la barra: fernet / choripán</div>
+        <div><kbd>Esc</kbd><kbd>P</kbd> pausa</div>
+        <div><kbd>Clic</kbd> tomar o comer</div>
+        <div><kbd>M</kbd> silenciar el sonido</div>
+        <div>Dejá todo cerca de un escenario: llená el <b>aguante</b></div>
+      </div>
       <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
     </div>
 
     <!-- Aviso de sonido silenciado (aparece con la tecla M) -->
-    <div id="aviso-silencio">🔇 Silenciado (M para activar)</div>
+    <div id="aviso-silencio" class="cartel">🔇 Silenciado (M para activar)</div>
 
     <!-- Mira en el centro de la pantalla -->
     <div id="mira"></div>
 
     <!-- Tema que está sonando (lo completa main.js) -->
-    <div id="tema-actual"></div>
+    <div id="tema-actual" class="cartel"></div>
 
     <!-- Acciones que está haciendo el jugador y aviso del pogo (los completa acciones.js) -->
-    <div id="indicador-acciones"></div>
-    <div id="aviso-pogo"></div>
+    <div id="indicador-acciones" class="cartel"></div>
+    <div id="aviso-pogo" class="cartel"></div>
 
     <!-- Aviso de la barra (lo completa barra.js) -->
-    <div id="aviso-barra"></div>
+    <div id="aviso-barra" class="cartel"></div>
 
     <!-- Aguante-metro (lo completa aguante.js) -->
-    <div id="aguante">
+    <div id="aguante" class="cartel">
       <div id="aguante-texto">Aguante</div>
       <div id="aguante-barra"><div id="aguante-relleno"></div></div>
     </div>

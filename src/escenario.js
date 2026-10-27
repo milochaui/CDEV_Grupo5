@@ -45,6 +45,7 @@ const ALTO_TRAPO = 1;
  *
  * Además, en escenario.userData deja:
  *  - nombre: el nombre de la banda.
+ *  - color: el color de la banda (el mismo de config.color).
  *  - colisiones: la lista de zonas sólidas (tarima, torres de parlantes y valla)
  *    que el jugador no puede atravesar. Cada caja guarda también el centro
  *    y el ángulo de giro de su escenario (ver jugador.js).
@@ -62,8 +63,9 @@ export function crearEscenario(config) {
   const escenario = new THREE.Group();
 
   // userData es un objeto libre que Three.js nos deja usar para guardar datos propios.
-  // Guardamos el nombre de la banda (lo usa el indicador del tema que suena).
+  // Guardamos el nombre y el color de la banda (los usa el indicador del tema que suena).
   escenario.userData.nombre = config.nombre;
+  escenario.userData.color = config.color;
   // Acá vamos juntando las cajas de colisión a medida que creamos las partes.
   escenario.userData.colisiones = [];
 

@@ -1,24 +1,26 @@
 // Punto de entrada del simulador.
 // Arma la escena: predio, cielo (del atardecer a la noche), iluminación, cámara y los tres escenarios.
 import * as THREE from 'three';
+// Postprocesado: efectos que se aplican a la imagen ya dibujada (ver "Bloom" más abajo).
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { crearEscenario } from './escenario.js';
 import { crearJugador } from './jugador.js';
 import { crearAcciones } from './acciones.js';
 import { crearCielo } from './cielo.js';
 import { crearAguanteMetro } from './aguante.js';
 import { crearBarra, crearPedidos } from './barra.js';
+import { crearPiso, crearBanderines } from './predio.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
 const escena = new THREE.Scene();
 
-// Color del cielo: un color de fondo. Este es el de la noche, pero el festival arranca
-// al atardecer: cielo.js lo va cambiando (a él y a la niebla) mientras se juega.
-const colorCielo = new THREE.Color(0x0a0a23);
-escena.background = colorCielo;
-
-// Niebla del mismo color que el cielo: hace que el piso se "funda" con el horizonte.
-escena.fog = new THREE.Fog(colorCielo, 50, 300);
+// Niebla: hace que el piso se "funda" con el horizonte. Su color lo va cambiando
+// cielo.js para que siempre sea el del horizonte (el cielo es una esfera, ver cielo.js).
+escena.fog = new THREE.Fog(0x0a0a23, 50, 300);
 
 // --- Cámara ---
 // PerspectiveCamera(campo de visión en grados, proporción ancho/alto, distancia mínima, distancia máxima)
@@ -52,6 +54,36 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
+// --- Bloom: el resplandor de las luces ---
+// En vez de dibujar la escena directo en pantalla, la dibujamos en una imagen intermedia
+// y le aplicamos efectos antes de mostrarla. Eso lo hace el EffectComposer, que va
+// pasando la imagen por una cadena de "pasadas":
+//  1. RenderPass: dibuja la escena como siempre.
+//  2. UnrealBloomPass: a lo que brilla mucho (reflectores, pantallas, fuegos, celulares,
+//     el sol) le agrega un halo de luz alrededor, como se ve en las fotos de un recital.
+//  3. OutputPass: corrige los colores para la pantalla (lo que antes hacía el renderer solo).
+// Si anda lento en una compu, se puede apagar con USAR_BLOOM = false.
+const USAR_BLOOM = true;
+const BLOOM_FUERZA = 0.7; // cuánto halo agrega
+const BLOOM_RADIO = 0.4; // qué tan desparramado es el halo
+const BLOOM_UMBRAL = 0.6; // desde qué brillo (0 a 1) algo empieza a tener halo
+
+// La imagen intermedia: HalfFloatType deja guardar brillos mayores a 1 (más blancos que
+// el blanco), y samples: 4 le pone antialias (sin eso los bordes quedan serruchados).
+const imagenIntermedia = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+  type: THREE.HalfFloatType,
+  samples: 4,
+});
+const composer = new EffectComposer(renderer, imagenIntermedia);
+composer.setPixelRatio(renderer.getPixelRatio());
+composer.setSize(window.innerWidth, window.innerHeight);
+composer.addPass(new RenderPass(escena, camara));
+// UnrealBloomPass(tamaño, fuerza, radio, umbral)
+composer.addPass(
+  new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), BLOOM_FUERZA, BLOOM_RADIO, BLOOM_UMBRAL)
+);
+composer.addPass(new OutputPass());
+
 // --- Iluminación general ---
 // Ninguna luz proyecta sombras: las sombras son lo más pesado de dibujar.
 
@@ -71,15 +103,8 @@ escena.add(luzLuna);
 // Al atardecer, luzLuna hace de luz del sol (naranja) y de a poco pasa a ser la luna.
 const cielo = crearCielo({ escena, luzGeneral, luzDirecta: luzLuna });
 
-// --- Piso (el predio) ---
-// Un plano de 500 x 500 metros.
+// El predio es un cuadrado de 500 x 500 metros (el piso se arma más abajo, ver "Piso").
 const TAMANO_PREDIO = 500;
-const geometriaPiso = new THREE.PlaneGeometry(TAMANO_PREDIO, TAMANO_PREDIO);
-const materialPiso = new THREE.MeshStandardMaterial({ color: 0x2e7d32 }); // verde pasto
-const piso = new THREE.Mesh(geometriaPiso, materialPiso);
-// Los planos se crean "parados" (verticales); lo rotamos 90° para que quede acostado.
-piso.rotation.x = -Math.PI / 2;
-escena.add(piso);
 
 // --- Escenarios ---
 // Como en un festival real, los tres escenarios forman un triángulo y todos miran
@@ -144,15 +169,37 @@ for (const escenario of escenarios) {
 // --- Barra de fernet y choripán ---
 // Detrás del lugar donde arranca el jugador, entre los escenarios de Las Pastillas y
 // de Calamaro, mirando al centro del predio.
-const barra = crearBarra({ posicion: { x: 0, z: 40 }, mirarHacia: CENTRO_PREDIO });
+const POSICION_BARRA = { x: 0, z: 40 };
+const barra = crearBarra({ posicion: POSICION_BARRA, mirarHacia: CENTRO_PREDIO });
 escena.add(barra.grupo);
 
+// --- Piso (el predio) ---
+// Pasto con tierra pisada delante de cada escenario y caminos al centro (ver predio.js).
+const piso = crearPiso({
+  tamano: TAMANO_PREDIO,
+  escenarios: escenarios.map((escenario) => ({ x: escenario.position.x, z: escenario.position.z })),
+  barra: POSICION_BARRA,
+  // La anisotropía hace que el dibujo del piso no se vea borroso cuando lo miramos de costado.
+  anisotropia: renderer.capabilities.getMaxAnisotropy(),
+});
+escena.add(piso);
+
+// --- Banderines ---
+// Guirnaldas de banderines y lamparitas en ronda alrededor del centro del predio.
+const banderines = crearBanderines();
+escena.add(banderines.grupo);
+
 // --- Jugador ---
-// Le pasamos las zonas sólidas de los tres escenarios y de la barra, y el borde del predio.
+// Le pasamos las zonas sólidas de los tres escenarios, de la barra y de los postes de
+// los banderines, y el borde del predio.
 // flatMap junta las listas de colisiones de cada escenario en una sola lista;
-// los "..." agregan las de la barra a esa misma lista.
+// los "..." agregan las de la barra y los postes a esa misma lista.
 const jugador = crearJugador(camara, document.body, {
-  colisiones: [...escenarios.flatMap((escenario) => escenario.userData.colisiones), ...barra.colisiones],
+  colisiones: [
+    ...escenarios.flatMap((escenario) => escenario.userData.colisiones),
+    ...barra.colisiones,
+    ...banderines.colisiones,
+  ],
   limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
 });
 
@@ -279,6 +326,11 @@ function actualizarIndicador() {
   if (indicadorTema.textContent !== texto) {
     indicadorTema.textContent = texto;
     indicadorTema.style.display = texto ? 'block' : 'none';
+    // El borde del cartel toma el color de la banda (la variable --color-banda del CSS, ver index.html).
+    if (masFuerte !== null) {
+      const color = '#' + new THREE.Color(masFuerte.userData.color).getHexString();
+      indicadorTema.style.setProperty('--color-banda', color);
+    }
   }
 }
 
@@ -287,6 +339,7 @@ window.addEventListener('resize', () => {
   camara.aspect = window.innerWidth / window.innerHeight;
   camara.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // --- Bucle de animación ---
@@ -348,6 +401,11 @@ function animar(tiempo) {
     }
   }
 
-  renderer.render(escena, camara);
+  // Dibujamos el cuadro: con bloom pasa por el composer, sin bloom va directo a la pantalla.
+  if (USAR_BLOOM) {
+    composer.render(delta);
+  } else {
+    renderer.render(escena, camara);
+  }
 }
 requestAnimationFrame(animar);

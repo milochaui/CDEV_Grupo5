@@ -51,7 +51,7 @@ public/
     ├── calamaro_conocido_sindocumentos.mp3
     ├── calamaro_medio_todaviaunacanciondeamor.mp3
     ├── calamaro_tranqui_buenasuerteyhastaluego.mp3
-    ├── ciro_conocido_astros.mp3
+    ├── calamaro_tranqui_buenasuerteyhastaluego.mp3
     ├── ciro_tranqui_servidor.mp3
     ├── pastillas_conocido_viejokarma.mp3
     └── pastillas_tranqui_mejuegoelcorazon.mp3
