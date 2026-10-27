@@ -1,15 +1,19 @@
 // Punto de entrada del simulador.
-// Arma la escena: predio, cielo de noche, iluminación, cámara y los tres escenarios.
+// Arma la escena: predio, cielo (del atardecer a la noche), iluminación, cámara y los tres escenarios.
 import * as THREE from 'three';
 import { crearEscenario } from './escenario.js';
 import { crearJugador } from './jugador.js';
 import { crearAcciones } from './acciones.js';
+import { crearCielo } from './cielo.js';
+import { crearAguanteMetro } from './aguante.js';
+import { crearBarra, crearPedidos } from './barra.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
 const escena = new THREE.Scene();
 
-// Cielo de noche: un color azul muy oscuro de fondo.
+// Color del cielo: un color de fondo. Este es el de la noche, pero el festival arranca
+// al atardecer: cielo.js lo va cambiando (a él y a la niebla) mientras se juega.
 const colorCielo = new THREE.Color(0x0a0a23);
 escena.background = colorCielo;
 
@@ -62,6 +66,11 @@ const luzLuna = new THREE.DirectionalLight(0xaabbff, 0.6);
 luzLuna.position.set(-50, 100, 50);
 escena.add(luzLuna);
 
+// --- Cielo: del atardecer a la noche ---
+// Cambia el color del cielo, de la niebla y de las dos luces de arriba, y baja el sol.
+// Al atardecer, luzLuna hace de luz del sol (naranja) y de a poco pasa a ser la luna.
+const cielo = crearCielo({ escena, luzGeneral, luzDirecta: luzLuna });
+
 // --- Piso (el predio) ---
 // Un plano de 500 x 500 metros.
 const TAMANO_PREDIO = 500;
@@ -88,6 +97,8 @@ const CENTRO_PREDIO = { x: 0, z: 0 };
 const escenarios = [
   crearEscenario({
     nombre: 'Ciro y los Persas',
+    banda: 'ciro', // los artistas que tocan arriba (ver artistas.js)
+    trapos: ['AGUANTE CIRO', 'LANÚS PRESENTE', 'LOS PERSAS', 'MORÓN', 'LA PLATA'], // colgados en la valla
     color: 0xff3355, // rojo
     posicion: { x: 0, z: -98 },
     mirarHacia: CENTRO_PREDIO,
@@ -99,6 +110,8 @@ const escenarios = [
   }),
   crearEscenario({
     nombre: 'Las Pastillas del Abuelo',
+    banda: 'pastillas', // los artistas que tocan arriba (ver artistas.js)
+    trapos: ['AGUANTE LAS PASTILLAS', 'QUILMES PRESENTE', 'EL PITI', 'SAN JUSTO', 'ROSARIO'], // colgados en la valla
     color: 0xff9900, // ámbar
     posicion: { x: -85, z: 49 },
     mirarHacia: CENTRO_PREDIO,
@@ -110,6 +123,8 @@ const escenarios = [
   }),
   crearEscenario({
     nombre: 'Andrés Calamaro',
+    banda: 'calamaro', // los artistas que tocan arriba (ver artistas.js)
+    trapos: ['AGUANTE EL SALMÓN', 'CÓRDOBA PRESENTE', 'CALAMARO', 'MAR DEL PLATA', 'TANDIL'], // colgados en la valla
     color: 0x33aaff, // celeste
     posicion: { x: 85, z: 49 },
     mirarHacia: CENTRO_PREDIO,
@@ -126,16 +141,29 @@ for (const escenario of escenarios) {
   escena.add(escenario);
 }
 
+// --- Barra de fernet y choripán ---
+// Detrás del lugar donde arranca el jugador, entre los escenarios de Las Pastillas y
+// de Calamaro, mirando al centro del predio.
+const barra = crearBarra({ posicion: { x: 0, z: 40 }, mirarHacia: CENTRO_PREDIO });
+escena.add(barra.grupo);
+
 // --- Jugador ---
-// Le pasamos las zonas sólidas de los tres escenarios y el borde del predio.
-// flatMap junta las listas de colisiones de cada escenario en una sola lista.
+// Le pasamos las zonas sólidas de los tres escenarios y de la barra, y el borde del predio.
+// flatMap junta las listas de colisiones de cada escenario en una sola lista;
+// los "..." agregan las de la barra a esa misma lista.
 const jugador = crearJugador(camara, document.body, {
-  colisiones: escenarios.flatMap((escenario) => escenario.userData.colisiones),
+  colisiones: [...escenarios.flatMap((escenario) => escenario.userData.colisiones), ...barra.colisiones],
   limitePredio: TAMANO_PREDIO / 2, // el predio va de -250 a 250 en X y en Z
 });
 
 // --- Acciones del recital (brazos, salto, cantar y pogo) ---
 const acciones = crearAcciones({ camara, jugador, escenarios });
+
+// --- Aguante-metro (la barra abajo a la derecha) ---
+const aguante = crearAguanteMetro({ acciones, escenarioMasFuerte });
+
+// --- Pedidos en la barra (fernet y choripán en la mano) ---
+const pedidos = crearPedidos({ barra, acciones, jugador, camara });
 
 // --- Pantalla de inicio, pausa y mira ---
 // El mismo cartel sirve de pantalla de inicio y de pantalla de pausa:
@@ -144,6 +172,7 @@ const pantallaInicio = document.getElementById('pantalla-inicio');
 const tituloCartel = document.getElementById('titulo-cartel');
 const textoClic = document.getElementById('texto-clic');
 const mira = document.getElementById('mira');
+const cartelAguante = document.getElementById('aguante');
 
 // Para no reiniciar la música en cada clic: solo arranca la primera vez.
 let musicaArrancada = false;
@@ -170,6 +199,7 @@ pantallaInicio.addEventListener('click', () => {
 jugador.controles.addEventListener('lock', () => {
   pantallaInicio.style.display = 'none';
   mira.style.display = 'block';
+  cartelAguante.style.display = 'block';
   if (musicaArrancada) {
     for (const escenario of escenarios) {
       escenario.userData.musica.reanudar();
@@ -183,6 +213,7 @@ jugador.controles.addEventListener('lock', () => {
 jugador.controles.addEventListener('unlock', () => {
   pantallaInicio.style.display = 'flex';
   mira.style.display = 'none';
+  cartelAguante.style.display = 'none';
   tituloCartel.textContent = 'Pausa';
   textoClic.textContent = 'Hacé clic para continuar';
   for (const escenario of escenarios) {
@@ -215,8 +246,13 @@ document.addEventListener('keydown', (event) => {
 // Si estamos tan lejos que no se escucha ninguna, el cartelito se esconde.
 const indicadorTema = document.getElementById('tema-actual');
 
-function actualizarIndicador() {
-  // Buscamos el escenario cuya música tiene más volumen en este momento.
+// Devuelve el escenario cuya música se escucha más fuerte en este momento,
+// o null si todavía no arrancó la música o si no se escucha ninguna.
+// La usan el indicador, el aguante-metro y las pantallas en vivo.
+function escenarioMasFuerte() {
+  if (!musicaArrancada) {
+    return null;
+  }
   let masFuerte = null;
   let mayorVolumen = 0; // si ninguna banda supera 0 (no se oye nada), masFuerte queda en null
   for (const escenario of escenarios) {
@@ -226,9 +262,14 @@ function actualizarIndicador() {
       masFuerte = escenario;
     }
   }
+  return masFuerte;
+}
+
+function actualizarIndicador() {
+  const masFuerte = escenarioMasFuerte();
 
   let texto = '';
-  if (musicaArrancada && masFuerte !== null) {
+  if (masFuerte !== null) {
     // crearEscenario deja guardado el nombre de la banda en userData.
     const banda = masFuerte.userData.nombre;
     texto = '♪ ' + banda + ' — ' + masFuerte.userData.musica.temaActual().titulo;
@@ -264,21 +305,49 @@ function animar(tiempo) {
 
   jugador.actualizar(delta);
   // El volumen de cada banda depende de dónde quedó parado el jugador.
-  // Y cada público reacciona a la música de su escenario, salvo en pausa:
+  // Y cada público (con su banda y su show de luces) reacciona a la música de su escenario, salvo en pausa:
   // si el mouse no está capturado no lo actualizamos y queda congelado.
   // Lo mismo con las acciones del jugador. Van antes que el público, así el
   // contagio que le mandan se nota en este mismo cuadro.
   const enPausa = !jugador.controles.isLocked;
   if (!enPausa) {
+    pedidos.actualizar(delta); // antes que acciones: cambia el gesto de llevar a la boca
     acciones.actualizar(delta);
+    cielo.actualizar(delta);
   }
   for (const escenario of escenarios) {
     escenario.userData.musica.actualizarVolumen(camara.position);
+    // Los aplausos bajan con la distancia igual que la música. En pausa no se escuchan.
+    escenario.userData.aplausos.actualizarVolumen(enPausa ? 0 : escenario.userData.musica.volumen());
     if (!enPausa) {
       escenario.userData.publico.actualizar(delta);
+      escenario.userData.banda.actualizar(delta);
+      escenario.userData.luces.actualizar(delta);
+      escenario.userData.fuegos.actualizar(delta);
     }
   }
   actualizarIndicador();
+  if (!enPausa) {
+    aguante.actualizar(delta);
+    // Con el aguante-metro lleno, el cantante que más se escucha se da vuelta y saluda.
+    const masFuerte = escenarioMasFuerte();
+    if (aguante.lleno() && masFuerte !== null) {
+      masFuerte.userData.banda.saludar(camara.position);
+    }
+  }
+
+  // Pantallas en vivo: filmamos solo el escenario que más se escucha, porque filmar es
+  // dibujar la escena otra vez (hacerlo con los tres sería pesado). Las otras dos muestran
+  // el color de su banda. En pausa no filmamos: queda congelada la última imagen.
+  const filmado = escenarioMasFuerte();
+  for (const escenario of escenarios) {
+    if (escenario !== filmado) {
+      escenario.userData.pantalla.ponerColor(renderer);
+    } else if (!enPausa) {
+      escenario.userData.pantalla.filmar(renderer, escena, delta);
+    }
+  }
+
   renderer.render(escena, camara);
 }
 requestAnimationFrame(animar);

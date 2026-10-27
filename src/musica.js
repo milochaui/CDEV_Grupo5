@@ -20,6 +20,9 @@ const DISTANCIA_SILENCIO = 97; // metros
 // Vite sirve la carpeta public/audio en la dirección /audio
 const CARPETA_AUDIO = '/audio/';
 
+// Silencio entre un tema y el siguiente: ahí el público aplaude (ver aplausos.js).
+const SEGUNDOS_ENTRE_TEMAS = 6;
+
 /**
  * Calcula el volumen (de 0 a 1) que corresponde a una distancia, en metros.
  *
@@ -50,7 +53,8 @@ function volumenSegunDistancia(distancia) {
  * @returns {{ sonido: THREE.PositionalAudio, arrancar: () => void, pausar: () => void,
  *             reanudar: () => void, temaActual: () => object,
  *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number,
- *             estaSonando: () => boolean, graves: () => number }}
+ *             estaSonando: () => boolean, graves: () => number,
+ *             alTerminarTema: (funcion: (tema) => void) => void }}
  */
 export function crearMusica(oyente, temas) {
   // PositionalAudio es un sonido con posición en el mundo 3D: se agrega al escenario
@@ -98,37 +102,80 @@ export function crearMusica(oyente, temas) {
   // Posición en la lista del tema que está sonando.
   let indice = 0;
 
+  let pausado = false; // el jugador puso pausa
+  let entreTemas = false; // terminó un tema y todavía no empezó el siguiente
+  let siguienteListo = false; // ya pasó el silencio entre temas
+  const avisos = []; // funciones a las que avisamos cuando termina un tema
+
   // Carga el tema de la posición "indice" y lo hace sonar.
   function reproducirTemaActual() {
     elemento.src = CARPETA_AUDIO + temas[indice].archivo;
     elemento.play();
   }
 
-  // Cuando termina un tema pasamos al siguiente. El % (resto de la división) hace que
-  // después del último volvamos al primero: con 2 temas, (1 + 1) % 2 = 0.
-  elemento.addEventListener('ended', () => {
+  // Pasa al tema siguiente. El % (resto de la división) hace que después del último
+  // volvamos al primero: con 2 temas, (1 + 1) % 2 = 0.
+  function siguienteTema() {
+    entreTemas = false;
+    siguienteListo = false;
     indice = (indice + 1) % temas.length;
     reproducirTemaActual();
+  }
+
+  // Cuando termina un tema: avisamos (para los aplausos y los fuegos artificiales) y,
+  // después de un silencio, pasamos al siguiente.
+  elemento.addEventListener('ended', () => {
+    for (const aviso of avisos) {
+      aviso(temas[indice]);
+    }
+    entreTemas = true;
+    // setTimeout llama a la función después de esa cantidad de milisegundos.
+    setTimeout(() => {
+      siguienteListo = true;
+      // Si justo está en pausa no arrancamos: lo hace reanudar() al volver.
+      if (!pausado) {
+        siguienteTema();
+      }
+    }, SEGUNDOS_ENTRE_TEMAS * 1000);
   });
 
   // Empieza la lista desde el primer tema. Se llama con el clic del jugador,
   // porque los navegadores no dejan reproducir sonido sin una interacción.
   function arrancar() {
     indice = 0;
+    entreTemas = false;
     reproducirTemaActual();
   }
 
   // Pausa el tema. El <audio> se acuerda en qué segundo quedó.
   function pausar() {
+    pausado = true;
     elemento.pause();
   }
 
   // Sigue el tema desde donde quedó. Si ya está sonando no hace nada
   // (así no lo "reiniciamos" sin querer).
   function reanudar() {
+    pausado = false;
+    if (entreTemas) {
+      // Estábamos en el silencio entre temas: si ya terminó, arranca el siguiente;
+      // si no, lo arranca el setTimeout de arriba cuando se cumpla el tiempo.
+      if (siguienteListo) {
+        siguienteTema();
+      }
+      return;
+    }
     if (elemento.paused) {
       elemento.play();
     }
+  }
+
+  /**
+   * Guarda una función para llamarla cada vez que termina un tema.
+   * La función recibe el tema que terminó: { archivo, titulo, conocido }.
+   */
+  function alTerminarTema(funcion) {
+    avisos.push(funcion);
   }
 
   // Devuelve el tema que está sonando ahora: { archivo, titulo, conocido }
@@ -174,5 +221,6 @@ export function crearMusica(oyente, temas) {
 
   return {
     sonido, arrancar, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
+    alTerminarTema,
   };
 }

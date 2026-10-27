@@ -125,6 +125,66 @@
         border-radius: 4px;
         pointer-events: none;
       }
+
+      /* Aviso de la barra (pedir, tomar, comer): debajo del aviso del pogo */
+      #aviso-barra {
+        display: none; /* se muestra cerca de la barra o con algo en la mano */
+        position: fixed;
+        top: calc(50% + 80px);
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #ffd27a;
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: pre; /* respeta los espacios entre las dos opciones */
+      }
+
+      /* Aguante-metro: abajo a la derecha (lo maneja aguante.js) */
+      #aguante {
+        display: none; /* se muestra cuando se juega, igual que la mira */
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: 220px;
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        border-radius: 4px;
+        pointer-events: none;
+      }
+      #aguante-texto {
+        display: inline-block; /* para poder agrandarlo con transform */
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        transform-origin: left center; /* se agranda desde la izquierda */
+      }
+      #aguante-barra {
+        height: 12px;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        overflow: hidden; /* que el relleno no se salga de los bordes redondeados */
+      }
+      #aguante-relleno {
+        width: 0%; /* aguante.js le cambia el ancho */
+        height: 100%;
+        background: linear-gradient(90deg, #ffcc33, #ff3355); /* de amarillo a rojo */
+      }
+      /* Barra llena: el texto se pone amarillo y "late" */
+      #aguante.lleno #aguante-texto {
+        color: #ffcc33;
+        animation: latido 0.4s infinite alternate;
+      }
+      @keyframes latido {
+        from { transform: scale(1); }
+        to { transform: scale(1.2); }
+      }
     </style>
   </head>
   <body>
@@ -141,6 +201,8 @@
         <li><b>F</b> (mantener): pogo (metido entre el público)</li>
         <li><b>Esc</b> o <b>P</b>: pausa (vuelve a este cartel)</li>
         <li><b>M</b>: silenciar / activar el sonido</li>
+        <li><b>R</b> / <b>C</b> en la barra: pedir un fernet / un choripán (<b>clic</b> para tomar o comer)</li>
+        <li>Dejá todo cerca de un escenario para llenar el <b>aguante-metro</b></li>
       </ul>
       <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
     </div>
@@ -157,6 +219,15 @@
     <!-- Acciones que está haciendo el jugador y aviso del pogo (los completa acciones.js) -->
     <div id="indicador-acciones"></div>
     <div id="aviso-pogo"></div>
+
+    <!-- Aviso de la barra (lo completa barra.js) -->
+    <div id="aviso-barra"></div>
+
+    <!-- Aguante-metro (lo completa aguante.js) -->
+    <div id="aguante">
+      <div id="aguante-texto">Aguante</div>
+      <div id="aguante-barra"><div id="aguante-relleno"></div></div>
+    </div>
 
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>
