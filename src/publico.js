@@ -1,7 +1,8 @@
 // Público de un escenario: muchas personas low-poly que reaccionan a la música.
 // Con un tema conocido se ponen eufóricas (saltan alto, brazos arriba) y con uno
-// menos conocido están tranquilas (se balancean). Los saltos siguen los golpes graves
-// del tema, que sacamos analizando el audio en tiempo real (ver graves() en musica.js).
+// menos conocido están tranquilas (se balancean y muchos levantan el celular con la
+// linterna prendida). Los saltos siguen los golpes graves del tema, que sacamos
+// analizando el audio en tiempo real (ver graves() en musica.js).
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,15 @@ const BALANCEO_TRANQUI = 0.1; // cuánto se inclinan al mecerse (radianes, 0.1 �
 const BALANCEO_EUFORIA = 0.03;
 const BALANCEOS_POR_SEGUNDO = 0.4; // ida y vuelta completa cada 2.5 segundos
 const VELOCIDAD_BRAZOS = 3; // con 3 tardan 1/3 de segundo en subir o bajar del todo
+const PROPORCION_BRAZOS_OVACION = 0.8; // al terminar un tema, en lo más fuerte de los aplausos
+
+// --- Celulares con la linterna prendida (en los temas tranquilos) ---
+const PROPORCION_CELULAR_TRANQUI = 0.3; // 30 % de la gente levanta el celular
+const PROPORCION_CELULAR_EUFORIA = 0; // con euforia nadie: están saltando
+const ANGULO_BRAZO_CELULAR = 2.7; // el brazo derecho bien arriba
+const VAIVEN_CELULAR = 0.3; // cuánto lo mueven de lado a lado (radianes)
+const VAIVENES_POR_SEGUNDO = 0.35; // ida y vuelta completa cada 3 segundos, despacio
+const VELOCIDAD_CELULAR = 1.5; // con 1.5 tardan 2/3 de segundo en levantarlo o bajarlo
 
 // --- Ritmo: cómo detectamos los golpes y cómo son los saltos ---
 // graves() mide en decibeles, así que una diferencia fija equivale a "tantas veces más fuerte".
@@ -64,6 +74,22 @@ geometriaBrazo.translate(0, -LARGO_BRAZO / 2, 0);
 // que "tiñe" cada copia por separado.
 const materialPersona = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
 
+// Celular: una cajita blanca. MeshBasicMaterial no depende de las luces:
+// siempre se ve encendido, como la linterna en la oscuridad.
+const geometriaCelular = new THREE.BoxGeometry(0.07, 0.13, 0.015);
+const materialCelular = new THREE.MeshBasicMaterial({ color: 0xf2f6ff });
+// Brillo de la linterna: una esfera transparente alrededor del celular. Como es redonda,
+// se ve igual desde cualquier lado. La mezcla "aditiva" suma su color a lo que hay
+// detrás, como la luz de verdad (igual que los haces de los reflectores).
+const geometriaBrillo = new THREE.SphereGeometry(0.15, 8, 6);
+const materialBrillo = new THREE.MeshBasicMaterial({
+  color: 0xdde8ff,
+  transparent: true,
+  opacity: 0.3,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false, // evita que el brillo "tape" otros objetos transparentes
+});
+
 // Colores de ropa: mucho negro (como en todo recital de rock) y algo de color.
 const COLORES_ROPA = [
   0x111111, 0x111111, 0x1a1a1a, 0x222222, // negros (más veces = más probable)
@@ -95,6 +121,11 @@ munecoBrazoIzq.position.set(0.27, ALTO_CUERPO - 0.05, 0); // hombro izquierdo
 const munecoBrazoDer = new THREE.Object3D();
 munecoBrazoDer.position.set(-0.27, ALTO_CUERPO - 0.05, 0); // hombro derecho
 muneco.add(munecoCabeza, munecoBrazoIzq, munecoBrazoDer);
+// El celular va en la mano derecha, en la punta del brazo, y sigue el largo del brazo:
+// con el brazo levantado, queda parado arriba de la mano.
+const munecoCelular = new THREE.Object3D();
+munecoCelular.position.set(0, -LARGO_BRAZO - 0.06, 0);
+munecoBrazoDer.add(munecoCelular);
 
 // Mezcla dos valores: con t = 0 da a, con t = 1 da b, y en el medio, algo intermedio.
 function mezclar(a, b, t) {
@@ -112,18 +143,19 @@ function alAzar(lista) {
  * de z = 0 y el fondo hacia +Z. Hay que ubicarlo en el frente de la tarima (ver escenario.js).
  *
  * @param {object} musica  La música del escenario (ver crearMusica en musica.js)
+ * @param {object} aplausos  Los aplausos del escenario (ver crearAplausos en aplausos.js)
  * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void,
  *             contagiar: Function, contarPersonasCerca: Function }}
  */
-export function crearPublico(musica) {
+export function crearPublico(musica, aplausos) {
   const grupo = new THREE.Group();
 
-  // --- Las 4 InstancedMesh ---
+  // --- Las 6 InstancedMesh ---
   // Una InstancedMesh dibuja muchas copias de la misma forma en UNA sola llamada a la
-  // placa de video. Con 4 (cuerpo, cabeza y cada brazo) dibujamos a todo el público.
+  // placa de video. Con 6 (cuerpo, cabeza, cada brazo, el celular y su brillo) dibujamos a todo el público.
   // Mucho más rápido que 800 Mesh sueltas.
-  function crearPieza(geometria) {
-    const pieza = new THREE.InstancedMesh(geometria, materialPersona, PERSONAS_POR_ESCENARIO);
+  function crearPieza(geometria, material = materialPersona) {
+    const pieza = new THREE.InstancedMesh(geometria, material, PERSONAS_POR_ESCENARIO);
     // Le avisamos que las posiciones van a cambiar en cada cuadro.
     pieza.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // Three.js no dibuja lo que queda fuera de la vista, pero para una InstancedMesh
@@ -136,6 +168,8 @@ export function crearPublico(musica) {
   const cabezas = crearPieza(geometriaCabeza);
   const brazosIzq = crearPieza(geometriaBrazo);
   const brazosDer = crearPieza(geometriaBrazo);
+  const celulares = crearPieza(geometriaCelular, materialCelular);
+  const brillos = crearPieza(geometriaBrillo, materialBrillo);
 
   // --- Repartimos a la gente ---
   const personas = [];
@@ -177,6 +211,9 @@ export function crearPublico(musica) {
       faseBalanceo: Math.random() * Math.PI * 2, // para que no se mezan todos juntos
       velocidadBalanceo: mezclar(0.8, 1.2, Math.random()),
       brazos: 0, // 0 = abajo, 1 = arriba (va cambiando de a poco)
+      ganasCelular: Math.random(),
+      faseVaiven: Math.random() * Math.PI * 2, // para que no muevan el celular todos juntos
+      celular: 0, // 0 = guardado, 1 = levantado (va cambiando de a poco)
       inicioSalto: -100, // en qué momento empezó (o empieza) su último salto
       alturaSalto: 0,
     });
@@ -191,7 +228,7 @@ export function crearPublico(musica) {
   }
 
   // Si no entraron todos (por falta de lugar), solo dibujamos los que sí.
-  for (const pieza of [cuerpos, cabezas, brazosIzq, brazosDer]) {
+  for (const pieza of [cuerpos, cabezas, brazosIzq, brazosDer, celulares, brillos]) {
     pieza.count = personas.length;
   }
 
@@ -288,6 +325,9 @@ export function crearPublico(musica) {
       }
     }
 
+    // Ovación: al terminar un tema, mientras aplauden, mucha gente levanta los brazos.
+    const ovacion = aplausos.intensidad();
+
     // --- 3. Cada persona ---
     for (let i = 0; i < personas.length; i++) {
       const persona = personas[i];
@@ -304,7 +344,10 @@ export function crearPublico(musica) {
       // Con euforiaPersona mayor que 1, mezclar se pasa un poco de los valores de euforia
       // (salta más alto, más brazos arriba).
       const proporcionSaltan = mezclar(PROPORCION_SALTAN_TRANQUI, PROPORCION_SALTAN_EUFORIA, euforiaPersona);
-      const proporcionBrazos = mezclar(PROPORCION_BRAZOS_ARRIBA_TRANQUI, PROPORCION_BRAZOS_ARRIBA_EUFORIA, euforiaPersona);
+      const proporcionBrazos = Math.max(
+        mezclar(PROPORCION_BRAZOS_ARRIBA_TRANQUI, PROPORCION_BRAZOS_ARRIBA_EUFORIA, euforiaPersona),
+        ovacion * PROPORCION_BRAZOS_OVACION
+      );
       const alturaSalto =
         mezclar(ALTURA_SALTO_TRANQUI, ALTURA_SALTO_EUFORIA, euforiaPersona) *
         mezclar(1, multiplicadorSaltoCerca, cercania); // con pogo, los de al lado saltan más
@@ -353,7 +396,25 @@ export function crearPublico(musica) {
       muneco.scale.setScalar(persona.escala);
       // Cada brazo gira hacia afuera: el de +X con ángulo positivo, el de −X con negativo.
       munecoBrazoIzq.rotation.z = anguloBrazos;
-      munecoBrazoDer.rotation.z = -anguloBrazos;
+
+      // Celular: con un tema tranquilo, algunos lo levantan con la mano derecha y lo
+      // mueven despacio de lado a lado. Igual que los brazos, sube y baja de a poco.
+      // (Antes de que arranque la música nadie lo levanta.)
+      const proporcionCelular = mezclar(PROPORCION_CELULAR_TRANQUI, PROPORCION_CELULAR_EUFORIA, euforiaPersona);
+      const objetivoCelular = musica.estaSonando() && persona.ganasCelular < proporcionCelular ? 1 : 0;
+      const pasoCelular = VELOCIDAD_CELULAR * delta;
+      if (persona.celular < objetivoCelular) {
+        persona.celular = Math.min(objetivoCelular, persona.celular + pasoCelular);
+      } else {
+        persona.celular = Math.max(objetivoCelular, persona.celular - pasoCelular);
+      }
+      const vaiven =
+        VAIVEN_CELULAR * Math.sin(reloj * Math.PI * 2 * VAIVENES_POR_SEGUNDO + persona.faseVaiven);
+      // El brazo derecho va del ángulo de siempre al de "celular arriba", según cuánto lo levantó.
+      const anguloBrazoDer = mezclar(anguloBrazos, ANGULO_BRAZO_CELULAR + vaiven, persona.celular);
+      munecoBrazoDer.rotation.z = -anguloBrazoDer;
+      // El celular aparece (crece) a medida que lo levanta: con escala 0 no se ve.
+      munecoCelular.scale.setScalar(persona.celular);
       muneco.updateMatrixWorld(true);
 
       // ...y copiamos la matriz de cada pieza a su InstancedMesh.
@@ -361,6 +422,8 @@ export function crearPublico(musica) {
       cabezas.setMatrixAt(i, munecoCabeza.matrixWorld);
       brazosIzq.setMatrixAt(i, munecoBrazoIzq.matrixWorld);
       brazosDer.setMatrixAt(i, munecoBrazoDer.matrixWorld);
+      celulares.setMatrixAt(i, munecoCelular.matrixWorld);
+      brillos.setMatrixAt(i, munecoCelular.matrixWorld); // el brillo va donde está el celular
     }
 
     // Avisamos que las matrices cambiaron, para que se manden a la placa de video.
@@ -368,6 +431,8 @@ export function crearPublico(musica) {
     cabezas.instanceMatrix.needsUpdate = true;
     brazosIzq.instanceMatrix.needsUpdate = true;
     brazosDer.instanceMatrix.needsUpdate = true;
+    celulares.instanceMatrix.needsUpdate = true;
+    brillos.instanceMatrix.needsUpdate = true;
   }
 
   // Lo llamamos una vez para que la gente aparezca en su lugar antes del primer cuadro.

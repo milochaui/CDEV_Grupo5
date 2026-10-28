@@ -4,6 +4,11 @@
 import * as THREE from 'three';
 import { crearMusica } from './musica.js';
 import { crearPublico } from './publico.js';
+import { crearBanda } from './artistas.js';
+import { crearShowDeLuces } from './luces.js';
+import { crearPantallaEnVivo } from './pantalla.js';
+import { crearAplausos } from './aplausos.js';
+import { crearFuegosArtificiales } from './fuegos.js';
 
 // --- Medidas del escenario, en metros ---
 const ANCHO = 24; // de izquierda a derecha
@@ -13,6 +18,13 @@ const ALTO_ESTRUCTURA = 14; // altura de los travesaños del techo
 
 // Lado de los travesaños (vigas cuadradas)
 const GROSOR_VIGA = 0.6;
+
+// Valla entre el escenario y el público
+const DISTANCIA_VALLA = 2.2; // metros entre el frente de la tarima y la valla
+const ANCHO_VALLA = 32; // de punta a punta: llega hasta las torres de parlantes
+const ALTO_VALLA = 1.2;
+const ANCHO_TRAPO = 2.8;
+const ALTO_TRAPO = 1;
 
 /**
  * Crea un escenario completo y lo devuelve como un THREE.Group.
@@ -28,22 +40,32 @@ const GROSOR_VIGA = 0.6;
  * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} config.temas
  *        Temas que toca la banda, en orden (archivo = nombre del mp3 en public/audio)
  * @param {THREE.AudioListener} config.oyente  Los "oídos" del jugador
+ * @param {string} config.banda  Qué artistas tocan arriba: 'ciro', 'pastillas' o 'calamaro'
+ * @param {string[]} config.trapos  Lo que dicen los trapos colgados en la valla
  *
  * Además, en escenario.userData deja:
  *  - nombre: el nombre de la banda.
- *  - colisiones: la lista de zonas sólidas (tarima y torres de parlantes)
+ *  - color: el color de la banda (el mismo de config.color).
+ *  - colisiones: la lista de zonas sólidas (tarima, torres de parlantes y valla)
  *    que el jugador no puede atravesar. Cada caja guarda también el centro
  *    y el ángulo de giro de su escenario (ver jugador.js).
  *  - musica: la música del escenario. Por ejemplo, musica.temaActual().conocido
  *    dice si el tema que suena ahora es conocido.
  *  - publico: la gente frente al escenario. publico.actualizar(delta) la anima.
+ *  - banda: los artistas arriba de la tarima. banda.actualizar(delta) los anima.
+ *  - luces: el show de luces. luces.actualizar(delta) lo mueve con la música.
+ *  - pantalla: la pantalla en vivo. pantalla.filmar(...) muestra a la banda y
+ *    pantalla.ponerColor(...) la pinta del color de la banda (ver pantalla.js).
+ *  - aplausos: los aplausos y gritos del público al terminar cada tema.
+ *  - fuegos: los fuegos artificiales. fuegos.actualizar(delta) los mueve.
  */
 export function crearEscenario(config) {
   const escenario = new THREE.Group();
 
   // userData es un objeto libre que Three.js nos deja usar para guardar datos propios.
-  // Guardamos el nombre de la banda (lo usa el indicador del tema que suena).
+  // Guardamos el nombre y el color de la banda (los usa el indicador del tema que suena).
   escenario.userData.nombre = config.nombre;
+  escenario.userData.color = config.color;
   // Acá vamos juntando las cajas de colisión a medida que creamos las partes.
   escenario.userData.colisiones = [];
 
@@ -56,13 +78,15 @@ export function crearEscenario(config) {
   };
 
   // Cada función agrega una parte del escenario al grupo.
+  // Algunas devuelven las piezas que después mueve el show de luces.
   crearTarima(escenario, materiales);
   crearEstructura(escenario, materiales);
-  crearPantalla(escenario, materiales, config.color);
+  const pantalla = crearPantalla(escenario, materiales, config.color);
   crearTorresDeParlantes(escenario, materiales);
-  crearReflectores(escenario, materiales, config.color);
-  crearLuces(escenario, config.color);
+  const reflectores = crearReflectores(escenario, materiales, config.color);
+  const luces = crearLuces(escenario, config.color);
   crearCartel(escenario, config.nombre, config.color);
+  crearValla(escenario, materiales, config.trapos);
 
   // Música: el sonido sale del frente del escenario, a la altura de los parlantes.
   // Como es parte del grupo, se mueve junto con el escenario.
@@ -71,12 +95,53 @@ export function crearEscenario(config) {
   escenario.add(musica.sonido);
   escenario.userData.musica = musica;
 
+  // Aplausos: el sonido sale de en medio del público (a unos 15 m de la primera fila).
+  const aplausos = crearAplausos(config.oyente);
+  aplausos.sonido.position.set(0, 2, PROFUNDIDAD / 2 + 15);
+  escenario.add(aplausos.sonido);
+  escenario.userData.aplausos = aplausos;
+
   // Público: arranca en el frente de la tarima y se extiende hacia adelante (+Z).
   // Como es parte del grupo, queda movido y girado junto con el escenario.
-  const publico = crearPublico(musica);
+  const publico = crearPublico(musica, aplausos);
   publico.grupo.position.z = PROFUNDIDAD / 2;
   escenario.add(publico.grupo);
   escenario.userData.publico = publico;
+
+  // Artistas: la banda arriba de la tarima. Aparece cuando empieza la música.
+  const banda = crearBanda(config.banda, musica);
+  banda.grupo.position.y = ALTO_TARIMA;
+  escenario.add(banda.grupo);
+  escenario.userData.banda = banda;
+
+  // Show de luces: los reflectores, las luces y la pantalla se mueven con la música.
+  escenario.userData.luces = crearShowDeLuces(
+    {
+      escenario: escenario,
+      reflectores: reflectores.lista,
+      materialHaz: reflectores.materialHaz,
+      luces: luces,
+      materialPantalla: pantalla.material,
+    },
+    musica
+  );
+
+  // Pantalla en vivo: una cámara filma a la banda y lo muestra en la pantalla del fondo.
+  escenario.userData.pantalla = crearPantallaEnVivo({ escenario, pantalla, color: config.color });
+
+  // Fuegos artificiales detrás del escenario
+  const fuegos = crearFuegosArtificiales(config.color);
+  escenario.add(fuegos.puntos);
+  escenario.userData.fuegos = fuegos;
+
+  // Al terminar cada tema el público aplaude (más fuerte si es conocido)
+  // y, si era un tema conocido, salen los fuegos artificiales.
+  musica.alTerminarTema((tema) => {
+    aplausos.aplaudir(tema.conocido ? 1 : 0.5);
+    if (tema.conocido) {
+      fuegos.lanzar();
+    }
+  });
 
   // Movemos todo el grupo al lugar del predio indicado.
   escenario.position.set(config.posicion.x, 0, config.posicion.z);
@@ -192,6 +257,10 @@ function crearPantalla(escenario, materiales, color) {
   const pantalla = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), materialPantalla);
   pantalla.position.set(0, ALTO_TARIMA + 1 + 4, -PROFUNDIDAD / 2 + 0.7);
   escenario.add(pantalla);
+
+  // Devolvemos la pantalla: el show de luces le cambia el brillo con la música
+  // y pantalla.js le pone encima la imagen filmada de la banda.
+  return pantalla;
 }
 
 // Torres de parlantes: una a cada costado, apoyadas en el piso, afuera de la tarima.
@@ -235,7 +304,10 @@ function crearTorresDeParlantes(escenario, materiales) {
 // Reflectores: 4 focos colgados del travesaño de adelante, apuntando a la tarima.
 // Cada uno tiene un "haz de luz" falso: un cono transparente. No es una luz de verdad,
 // por eso casi no afecta el rendimiento, pero se ve como el rayo de un reflector.
+// Devuelve { lista, materialHaz }: lo que necesita el show de luces para moverlos (ver luces.js).
 function crearReflectores(escenario, materiales, color) {
+  const lista = [];
+
   // El cuerpo del foco: un cilindro corto. Lo giramos para que su eje apunte hacia +Z;
   // así después lookAt() lo orienta directo hacia el objetivo.
   const geometriaFoco = new THREE.CylinderGeometry(0.35, 0.45, 0.9, 8);
@@ -278,12 +350,17 @@ function crearReflectores(escenario, materiales, color) {
     haz.position.copy(origen);
     haz.lookAt(objetivo);
     escenario.add(haz);
+
+    lista.push({ foco, haz, origen, objetivo, largo });
   }
+  return { lista, materialHaz };
 }
 
 // Luces reales del escenario: solo 2 SpotLight (luz tipo "linterna") y SIN sombras,
 // para que corra fluido en cualquier notebook.
+// Devuelve la lista de luces: el show de luces les cambia la intensidad.
 function crearLuces(escenario, color) {
+  const spots = [];
   const luces = [
     { color: color, x: -6 }, // una del color de la banda
     { color: 0xffffff, x: 6 }, // y una blanca
@@ -296,7 +373,9 @@ function crearLuces(escenario, color) {
     luz.target.position.set(0, ALTO_TARIMA, -1);
     escenario.add(luz);
     escenario.add(luz.target); // el target tiene que estar en la escena para que funcione
+    spots.push(luz);
   }
+  return spots;
 }
 
 // Cartel con el nombre de la banda, arriba del travesaño de adelante.
@@ -334,4 +413,96 @@ function crearCartel(escenario, nombre, color) {
   );
   cartel.position.set(0, ALTO_ESTRUCTURA + GROSOR_VIGA / 2 + altoCartel / 2, PROFUNDIDAD / 2);
   escenario.add(cartel);
+}
+
+// Valla entre el escenario y el público, con los trapos de la gente colgados.
+// Entre la valla y la tarima queda el "foso", que no se puede pisar.
+function crearValla(escenario, materiales, trapos) {
+  const z = PROFUNDIDAD / 2 + DISTANCIA_VALLA;
+
+  // Dos barandas largas (arriba y abajo) y postes cada 2 metros.
+  for (const y of [ALTO_VALLA, 0.15]) {
+    const baranda = new THREE.Mesh(new THREE.BoxGeometry(ANCHO_VALLA, 0.08, 0.08), materiales.metal);
+    baranda.position.set(0, y, z);
+    escenario.add(baranda);
+  }
+  const geometriaPoste = new THREE.CylinderGeometry(0.04, 0.04, ALTO_VALLA, 6);
+  for (let x = -ANCHO_VALLA / 2; x <= ANCHO_VALLA / 2; x += 2) {
+    const poste = new THREE.Mesh(geometriaPoste, materiales.metal);
+    poste.position.set(x, ALTO_VALLA / 2, z);
+    escenario.add(poste);
+  }
+
+  // La valla y el foso son una sola zona sólida: desde el frente de la tarima hasta la valla.
+  const profundidadFoso = DISTANCIA_VALLA + 0.1;
+  agregarColision(escenario, 0, PROFUNDIDAD / 2 + profundidadFoso / 2, ANCHO_VALLA, profundidadFoso);
+
+  // Trapos repartidos a lo largo de la valla, colgados de la baranda de arriba.
+  const separacion = ANCHO_VALLA / trapos.length;
+  trapos.forEach((texto, i) => {
+    const material = crearMaterialTrapo(texto, DISENOS_TRAPO[i % DISENOS_TRAPO.length]);
+    const geometria = new THREE.PlaneGeometry(ANCHO_TRAPO, ALTO_TRAPO);
+    const x = -ANCHO_VALLA / 2 + separacion * (i + 0.5);
+    const y = ALTO_VALLA - ALTO_TRAPO / 2;
+
+    // Un trapo de verdad se lee al revés de un lado. Acá usamos dos planos espalda con
+    // espalda, así se lee bien desde el público y desde el escenario.
+    const deFrente = new THREE.Mesh(geometria, material); // mira al público (+Z)
+    deFrente.position.set(x, y, z + 0.06);
+    escenario.add(deFrente);
+    const deEspaldas = new THREE.Mesh(geometria, material);
+    deEspaldas.rotation.y = Math.PI; // mira al escenario (−Z)
+    deEspaldas.position.set(x, y, z - 0.06);
+    escenario.add(deEspaldas);
+  });
+}
+
+// Colores de los trapos: [franjas de afuera, franja del medio]
+const DISENOS_TRAPO = [
+  ['#c8102e', '#ffffff'], // rojo y blanco
+  ['#003da5', '#ffd100'], // azul y amarillo
+  ['#111111', '#ffffff'], // negro y blanco
+  ['#6cace4', '#ffffff'], // celeste y blanco
+  ['#00843d', '#ffffff'], // verde y blanco
+];
+
+// Dibuja un trapo en un <canvas> (tres franjas y el texto encima) y lo usa como textura,
+// igual que el cartel con el nombre de la banda.
+function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 560; // misma proporción que el trapo (2.8 x 1)
+  canvas.height = 200;
+  const ctx = canvas.getContext('2d');
+
+  // Tres franjas horizontales
+  const altoFranja = canvas.height / 3;
+  ctx.fillStyle = colorAfuera;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = colorMedio;
+  ctx.fillRect(0, altoFranja, canvas.width, altoFranja);
+
+  // Texto blanco con borde negro grueso: se lee sobre cualquier color de franja
+  ctx.font = 'bold 64px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 10;
+  ctx.lineJoin = 'round'; // bordes redondeados en las puntas de las letras
+  ctx.strokeStyle = '#000000';
+  ctx.fillStyle = '#ffffff';
+  const anchoMaximo = canvas.width - 40;
+  ctx.strokeText(texto, canvas.width / 2, canvas.height / 2, anchoMaximo);
+  ctx.fillText(texto, canvas.width / 2, canvas.height / 2, anchoMaximo);
+
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.colorSpace = THREE.SRGBColorSpace;
+
+  // Con la textura también como "emissive" el trapo brilla un poco: así se lee de noche,
+  // pero sigue reaccionando a las luces (no queda plano como el cartel).
+  return new THREE.MeshStandardMaterial({
+    map: textura,
+    emissive: 0xffffff,
+    emissiveMap: textura,
+    emissiveIntensity: 0.35,
+    roughness: 1,
+  });
 }

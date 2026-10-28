@@ -24,6 +24,11 @@ const AGITE_BRAZOS = 0.15; // cuánto se agitan levantados (radianes)
 const AGITES_POR_SEGUNDO = 2.5;
 const INERCIA_SALTO_BRAZOS = 0.03; // al saltar, los brazos "se quedan atrás" un poco
 
+// --- Algo en la mano derecha (un fernet o un choripán, ver barra.js) ---
+const ANGULO_SOSTENER = -1.05; // en reposo, el brazo derecho más arriba para que se vea lo que tiene
+const ANGULO_BOCA = -0.5; // brazo levantado hacia la cara (tomar o comer)
+const COSTADO_BOCA = 0.5; // y hacia el centro de la pantalla
+
 // --- Salto ---
 // Con estos valores el salto sube unos 85 cm y dura unos 0.75 segundos.
 const VELOCIDAD_SALTO = 4.5; // metros por segundo hacia arriba al despegar
@@ -123,7 +128,12 @@ function acercar(valor, objetivo, paso) {
  * @param {THREE.PerspectiveCamera} opciones.camara  La cámara del jugador (tiene que estar en la escena)
  * @param {object} opciones.jugador  Lo que devuelve crearJugador (ver jugador.js)
  * @param {Array<THREE.Group>} opciones.escenarios  Los escenarios (con su música y su público en userData)
- * @returns {{ actualizar: (delta: number) => void }}
+ * @returns {{ actualizar: (delta: number) => void,
+ *             estado: {brazos: boolean, cantando: boolean, pogo: boolean, saltando: boolean},
+ *             manoDerecha: THREE.Group, gesto: {boca: number} }}
+ *  - estado dice qué está haciendo el jugador en este momento (lo usa aguante.js).
+ *  - manoDerecha: lo que se agregue a este grupo aparece en la mano derecha (ver barra.js).
+ *  - gesto.boca: de 0 a 1, cuánto lleva la mano derecha a la boca (lo cambia barra.js).
  */
 export function crearAcciones({ camara, jugador, escenarios }) {
   // --- Brazos ---
@@ -136,6 +146,13 @@ export function crearAcciones({ camara, jugador, escenarios }) {
   // Los ángulos de costado (0.1 y −0.1) son los mismos que usa actualizar() en reposo.
   brazoDerecho.rotation.set(ANGULO_BRAZOS_REPOSO, 0, 0.1);
   brazoIzquierdo.rotation.set(ANGULO_BRAZOS_REPOSO, 0, -0.1);
+
+  // Mano derecha: un grupo vacío en la punta del brazo derecho. Lo que se le agregue
+  // (un vaso, un choripán) se mueve con el brazo.
+  const manoDerecha = new THREE.Group();
+  manoDerecha.position.y = LARGO_ANTEBRAZO + 0.06; // donde está la mano
+  brazoDerecho.add(manoDerecha);
+  const gesto = { boca: 0 };
 
   // --- Cartelitos en pantalla (están en index.html) ---
   const indicador = document.getElementById('indicador-acciones');
@@ -152,6 +169,9 @@ export function crearAcciones({ camara, jugador, escenarios }) {
   const empujon = { x: 0, z: 0 }; // velocidad del empujón actual (metros por segundo)
   let contagio = 0; // euforia extra que estamos contagiando ahora
   let contagioPogo = 0; // 0 a 1: cuánto del "salto más alto" del pogo contagiamos
+
+  // Qué está haciendo el jugador. Lo completamos en cada cuadro y lo lee el aguante-metro.
+  const estado = { brazos: false, cantando: false, pogo: false, saltando: false };
 
   // Inclinación de la cámara que pusimos en el cuadro anterior (radianes).
   let inclinacionAplicada = 0; // hacia arriba (cantar)
@@ -281,8 +301,20 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     // El derecho y el izquierdo son espejos: el giro de costado va con signo contrario.
     // El agite se suma igual a los dos: se mueven juntos de un lado al otro, como en los recitales.
     // rotation.set(adelante, 0, costado): x inclina hacia adelante, z hacia los costados.
-    brazoDerecho.rotation.set(anguloAdelante, 0, anguloCostado + agite);
+    // El derecho, si tiene algo en la mano, sube un poco para que se vea (salvo que ya
+    // esté levantado con E). Y con gesto.boca se va hacia la cara.
+    const sostiene = manoDerecha.children.length > 0;
+    let adelanteDerecho = anguloAdelante;
+    if (sostiene) {
+      adelanteDerecho += (ANGULO_SOSTENER - ANGULO_BRAZOS_REPOSO) * (1 - levantado);
+    }
+    adelanteDerecho = mezclar(adelanteDerecho, ANGULO_BOCA, gesto.boca);
+    const costadoDerecho = mezclar(anguloCostado + agite, COSTADO_BOCA, gesto.boca);
+    brazoDerecho.rotation.set(adelanteDerecho, 0, costadoDerecho);
     brazoIzquierdo.rotation.set(anguloAdelante, 0, -anguloCostado + agite);
+    // Lo que tiene en la mano queda derecho: lo giramos al revés que el brazo.
+    // Al llevarlo a la boca lo dejamos inclinar un poco (como al tomar de un vaso).
+    manoDerecha.rotation.x = -adelanteDerecho * (1 - 0.5 * gesto.boca);
 
     // --- 6. Contagio al público ---
     let objetivoContagio = 0;
@@ -307,7 +339,13 @@ export function crearAcciones({ camara, jugador, escenarios }) {
       );
     }
 
-    // --- 7. Cartelitos ---
+    // --- 7. Estado para el aguante-metro ---
+    estado.brazos = conBrazosArriba;
+    estado.cantando = cantando;
+    estado.pogo = haciendoPogo;
+    estado.saltando = alturaSalto > 0; // está en el aire
+
+    // --- 8. Cartelitos ---
     const partes = [];
     if (cantando) partes.push('🎤 Cantando');
     if (haciendoPogo) partes.push('🤘 Pogo');
@@ -315,5 +353,5 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     mostrar(avisoPogo, quierePogo && !haciendoPogo ? 'Metete entre el público para hacer pogo' : '');
   }
 
-  return { actualizar };
+  return { actualizar, estado, manoDerecha, gesto };
 }
