@@ -174,7 +174,7 @@ const escenarios = [
         inicio: '19:30',
         fin: '20:45',
         temas: [
-          { archivo: 'callejeros_tranqui_unanuevanochefria.mp3', titulo: 'Una nueva noche fría', conocido: false },
+          { archivo: 'callejeros_tranqui_canciondecuna.mp3', titulo: 'Canción de cuna', conocido: false },
           { archivo: 'callejeros_conocido_rocanrolessindestino.mp3', titulo: 'Rocanroles sin destino', conocido: true },
         ],
         trapos: ['CALLEJEROS', 'VILLA CELINA', 'ROCK BARRIAL', 'LA MATANZA', 'CIUDADELA'],
@@ -188,7 +188,7 @@ const escenarios = [
         fin: '23:00',
         temas: [
           { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
-          { archivo: 'ciro_tranqui_servidor.mp3', titulo: 'Servidor', conocido: false },
+          { archivo: 'ciro_tranqui_alatardecer.mp3', titulo: 'Al atardecer', conocido: false },
         ],
         trapos: ['AGUANTE CIRO', 'LANÚS PRESENTE', 'LOS PERSAS', 'MORÓN', 'LA PLATA'],
       },
@@ -249,7 +249,7 @@ const escenarios = [
         inicio: '18:20',
         fin: '19:35',
         temas: [
-          { archivo: 'ntvg_tranqui_alasnueve.mp3', titulo: 'A las nueve', conocido: false },
+          { archivo: 'ntvg_tranqui_cielodeunsolocolor.mp3', titulo: 'Cielo de un solo color', conocido: false },
           { archivo: 'ntvg_conocido_chau.mp3', titulo: 'Chau', conocido: true },
         ],
         trapos: ['NO TE VA GUSTAR', 'URUGUAY PRESENTE', 'NTVG', 'MONTEVIDEO', 'EL CERRO'],
@@ -262,7 +262,7 @@ const escenarios = [
         inicio: '19:50',
         fin: '21:05',
         temas: [
-          { archivo: 'velapuerca_tranqui_llenosdemagia.mp3', titulo: 'Llenos de magia', conocido: false },
+          { archivo: 'velapuerca_tranqui_misemilla.mp3', titulo: 'Mi semilla', conocido: false },
           { archivo: 'velapuerca_conocido_zafar.mp3', titulo: 'Zafar', conocido: true },
         ],
         trapos: ['LA VELA PUERCA', 'VAMO ARRIBA', 'MONTEVIDEO', 'LA VELA', 'URUGUAY'],

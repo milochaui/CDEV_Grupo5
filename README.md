@@ -41,28 +41,25 @@ Después abrir en el navegador la dirección que muestra la consola (normalmente
 
 Los archivos mp3 **no están en el repositorio**: la carpeta `public/audio` está en el `.gitignore`. Hay que copiarlos a mano en `public/audio/`, con **exactamente** estos nombres de archivo (son los que usa `src/main.js`):
 
-| Banda | Archivo | Tema |
-|---|---|---|
 | Guasones | `guasones_tranqui_pasanlashoras.mp3` | Pasan las horas |
 | Guasones | `guasones_conocido_reyesdelanoche.mp3` | Reyes de la noche |
-| Callejeros | `callejeros_tranqui_unanuevanochefria.mp3` | Una nueva noche fría |
+| Callejeros | `callejeros_tranqui_canciondecuna.mp3` | Canción de cuna |
 | Callejeros | `callejeros_conocido_rocanrolessindestino.mp3` | Rocanroles sin destino |
 | Ciro y los Persas | `ciro_conocido_astros.mp3` | Astros |
-| Ciro y los Persas | `ciro_tranqui_servidor.mp3` | Servidor |
+| Ciro y los Persas | `ciro_tranquialatardecer.mp3` | Al atardecer |
 | Turf | `turf_tranqui_locounpoco.mp3` | Loco un poco |
 | Turf | `turf_conocido_pasosalcostado.mp3` | Pasos al costado |
 | Intoxicados | `intoxicados_tranqui_nuncaquise.mp3` | Nunca quise |
 | Intoxicados | `intoxicados_conocido_quierenrock.mp3` | Quieren rock |
 | Las Pastillas del Abuelo | `pastillas_conocido_viejokarma.mp3` | Viejo Karma |
 | Las Pastillas del Abuelo | `pastillas_tranqui_mejuegoelcorazon.mp3` | Me juego el corazón |
-| No Te Va Gustar | `ntvg_tranqui_alasnueve.mp3` | A las nueve |
+| No Te Va Gustar | `ntvg_tranqui_cielodeunsolocolor.mp3` | Cielo de un solo color |
 | No Te Va Gustar | `ntvg_conocido_chau.mp3` | Chau |
-| La Vela Puerca | `velapuerca_tranqui_llenosdemagia.mp3` | Llenos de magia |
+| La Vela Puerca | `velapuerca_tranqui_misemilla.mp3` | Mi semilla |
 | La Vela Puerca | `velapuerca_conocido_zafar.mp3` | Zafar |
 | Andrés Calamaro | `calamaro_conocido_sindocumentos.mp3` | Sin documentos |
 | Andrés Calamaro | `calamaro_medio_todaviaunacanciondeamor.mp3` | Todavía una canción de amor |
 | Andrés Calamaro | `calamaro_tranqui_buenasuerteyhastaluego.mp3` | Buena suerte y hasta luego |
-
 La carpeta tiene que quedar así:
 
 ```

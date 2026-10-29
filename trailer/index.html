@@ -1,0 +1,1533 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salve Salve Rockanrol · Trailer</title>
+    <!-- Las mismas tipografías del juego: Bebas Neue (títulos) y Barlow (textos) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05030c;
+        color: #fff;
+        font-family: 'Barlow', Arial, sans-serif;
+        overflow: hidden;
+      }
+      /* El video (canvas vertical 9:16) y los botones al costado */
+      #escena {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+      }
+      canvas {
+        height: 96vh;
+        aspect-ratio: 9 / 16;
+        border-radius: 18px;
+        box-shadow: 0 0 90px rgba(255, 51, 85, 0.25);
+      }
+      #controles {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 230px;
+      }
+      button {
+        font-family: 'Bebas Neue', Impact, sans-serif;
+        font-size: 26px;
+        letter-spacing: 1px;
+        padding: 12px 16px;
+        border: 0;
+        border-radius: 10px;
+        cursor: pointer;
+        background: #1c1530;
+        color: #fff;
+      }
+      button.principal {
+        background: linear-gradient(90deg, #ffcc33, #ff3355);
+        color: #0d0a1f;
+      }
+      #estado {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+        line-height: 1.4;
+      }
+      /* Mientras se graba escondemos los botones */
+      body.grabando #controles {
+        visibility: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="escena">
+      <canvas id="lienzo"></canvas>
+      <div id="controles">
+        <button id="btn-play" class="principal">▶ Reproducir</button>
+        <button id="btn-reiniciar">↺ Desde el principio</button>
+        <button id="btn-grabar">⬇ Descargar video</button>
+        <div id="estado">
+          Reel vertical de 45 s (1080 × 1920).<br />
+          «Descargar video» lo reproduce entero y lo graba con el sonido: dejá esta pestaña
+          abierta hasta que termine.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // =====================================================================
+      // TRAILER DE SALVE SALVE ROCKANROL
+      // Todo el video se dibuja en un <canvas> a partir del tiempo: dibujar(t) arma el
+      // cuadro del segundo t. La música también se genera con código (Web Audio), así
+      // que no usa ningún tema con derechos de autor. El reloj de la música es el que
+      // manda: así imagen y sonido van siempre sincronizados.
+      // =====================================================================
+
+      const W = 1080; // ancho del video (vertical, como un reel)
+      const H = 1920; // alto del video
+      const DURACION = 45; // segundos
+
+      // Colores del juego
+      const ROJO = '#ff3355';
+      const AMBAR = '#ff9900';
+      const CELESTE = '#33aaff';
+      const DORADO = '#ffcc33';
+      const VIOLETA = '#b44bff';
+      const PIEL = '#c99a7a';
+      // Cielo del juego (cielo.js): arriba, medio, horizonte
+      const ATARDECER = ['#2b3f7a', '#c76a7a', '#ffa64d'];
+      const ANOCHECER = ['#120f38', '#4a2a6b', '#c0506a'];
+      const NOCHE = ['#03030f', '#0a0a28', '#1c1a45'];
+
+      const lienzo = document.getElementById('lienzo');
+      lienzo.width = W;
+      lienzo.height = H;
+      const ctx = lienzo.getContext('2d');
+
+      // ---------------------------------------------------------------------
+      // Utilidades matemáticas
+      // ---------------------------------------------------------------------
+      const limitar = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+      const mezclar = (a, b, p) => a + (b - a) * p;
+      const suave = (p) => p * p * (3 - 2 * p); // arranca y frena despacio
+      const salidaRapida = (p) => 1 - Math.pow(1 - p, 3); // arranca rápido y frena
+
+      // Números "al azar" pero siempre iguales (con semilla), para que cada cuadro
+      // salga igual cada vez que se dibuja.
+      function azarConSemilla(semilla) {
+        return function () {
+          semilla |= 0;
+          semilla = (semilla + 0x6d2b79f5) | 0;
+          let x = Math.imul(semilla ^ (semilla >>> 15), 1 | semilla);
+          x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+          return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      // Mezcla dos colores '#rrggbb' (p = 0 da el primero, p = 1 el segundo)
+      function mezclarColor(a, b, p) {
+        const ca = parseInt(a.slice(1), 16);
+        const cb = parseInt(b.slice(1), 16);
+        const r = Math.round(mezclar(ca >> 16, cb >> 16, p));
+        const g = Math.round(mezclar((ca >> 8) & 255, (cb >> 8) & 255, p));
+        const bl = Math.round(mezclar(ca & 255, cb & 255, p));
+        return `rgb(${r},${g},${bl})`;
+      }
+
+      // Golpe de ritmo: la música va a 120 pulsos por minuto (un pulso cada 0,5 s).
+      // Vale 1 justo en el pulso y se apaga rápido: lo usamos para que todo "lata".
+      const pulso = (t) => Math.exp(-((t % 0.5) * 9));
+
+      // ---------------------------------------------------------------------
+      // Dibujos básicos (todo low-poly, igual que el juego)
+      // ---------------------------------------------------------------------
+
+      // Cielo con degradé de tres colores
+      function cielo(colores, alto = H * 0.62) {
+        const g = ctx.createLinearGradient(0, 0, 0, alto);
+        g.addColorStop(0, colores[0]);
+        g.addColorStop(0.6, colores[1]);
+        g.addColorStop(1, colores[2]);
+        ctx.fillStyle = g;
+        ctx.fillRect(-400, -400, W + 800, H + 800);
+      }
+
+      // Cielo que pasa de un juego de colores a otro (p de 0 a 1)
+      function cieloMezcla(a, b, p, alto) {
+        cielo(
+          [0, 1, 2].map((i) => mezclarColor(a[i], b[i], p)),
+          alto,
+        );
+      }
+
+      // Estrellas fijas (se calculan una sola vez)
+      const ESTRELLAS = (() => {
+        const azar = azarConSemilla(7);
+        return Array.from({ length: 160 }, () => ({
+          x: azar() * W,
+          y: azar() * H * 0.55,
+          r: 1 + azar() * 2.5,
+          f: azar() * 6,
+        }));
+      })();
+
+      function estrellas(t, alfa = 1) {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        for (const e of ESTRELLAS) {
+          ctx.globalAlpha = alfa * (0.5 + 0.5 * Math.sin(t * 2 + e.f));
+          ctx.fillRect(e.x, e.y, e.r, e.r);
+        }
+        ctx.restore();
+      }
+
+      // Un escenario visto de frente: torres de parlantes, estructura, pantalla y
+      // reflectores que barren el cielo. s es la escala; t mueve las luces.
+      function escenario(cx, base, s, color, t, intensidad = 1) {
+        const w = 120 * s;
+        const h = 70 * s;
+        const x = cx - w / 2;
+        const golpe = pulso(t);
+
+        // Haces de luz (se suman a lo que hay detrás, como la luz de verdad)
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 4; i++) {
+          const angulo = Math.sin(t * 1.4 + i * 1.7) * 0.35 + (i - 1.5) * 0.28;
+          const px = x + ((i + 0.5) * w) / 4;
+          const py = base - h;
+          const largo = 900 * s;
+          const ancho = 34 * s;
+          const ex = px + Math.sin(angulo) * largo;
+          const ey = py - Math.cos(angulo) * largo;
+          const g = ctx.createLinearGradient(px, py, ex, ey);
+          g.addColorStop(0, color);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.globalAlpha = (0.22 + 0.25 * golpe) * intensidad;
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(ex - Math.cos(angulo) * ancho, ey - Math.sin(angulo) * ancho);
+          ctx.lineTo(ex + Math.cos(angulo) * ancho, ey + Math.sin(angulo) * ancho);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Torres de parlantes
+        ctx.fillStyle = '#0c0c12';
+        ctx.fillRect(x - 18 * s, base - 54 * s, 15 * s, 54 * s);
+        ctx.fillRect(x + w + 3 * s, base - 54 * s, 15 * s, 54 * s);
+        // Estructura y techo
+        ctx.fillStyle = '#17171f';
+        ctx.fillRect(x, base - h, w, h);
+        ctx.fillStyle = '#2c2c36';
+        ctx.fillRect(x - 5 * s, base - h - 7 * s, w + 10 * s, 7 * s);
+        // Pantalla, con su resplandor
+        ctx.save();
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 30 * s * (0.6 + 0.6 * golpe) * intensidad;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.75 + 0.25 * golpe;
+        ctx.fillRect(cx - 34 * s, base - h + 9 * s, 68 * s, 30 * s);
+        ctx.restore();
+        // Tarima
+        ctx.fillStyle = '#25252e';
+        ctx.fillRect(x + 6 * s, base - 16 * s, w - 12 * s, 16 * s);
+      }
+
+      // Ondas de sonido que salen de un punto (para "ver" la música)
+      function ondas(cx, cy, color, t, radioMax, alfa = 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = color;
+        for (let i = 0; i < 3; i++) {
+          const f = (t * 0.7 + i / 3) % 1;
+          ctx.globalAlpha = (1 - f) * 0.6 * alfa;
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 20 + f * radioMax, Math.PI * 1.05, Math.PI * 1.95);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Guirnalda de banderines con lamparitas
+      function banderines(x0, x1, y, caida, cantidad, tam, t) {
+        const colores = [ROJO, AMBAR, CELESTE, '#ffdd33', '#ffffff', '#33cc66'];
+        const vaiven = Math.sin(t * 1.5) * 8;
+        const cy = y + caida * 2 + vaiven;
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.quadraticCurveTo((x0 + x1) / 2, cy, x1, y);
+        ctx.stroke();
+        for (let i = 0; i < cantidad; i++) {
+          const p = (i + 0.5) / cantidad;
+          const px = x0 + (x1 - x0) * p;
+          const py = (1 - p) * (1 - p) * y + 2 * (1 - p) * p * cy + p * p * y;
+          ctx.fillStyle = colores[i % colores.length];
+          ctx.beginPath();
+          ctx.moveTo(px - tam / 2, py);
+          ctx.lineTo(px + tam / 2, py);
+          ctx.lineTo(px + Math.sin(t * 3 + i) * 4, py + tam * 1.3);
+          ctx.fill();
+          if (i % 2 === 0) {
+            ctx.save();
+            ctx.fillStyle = '#ffcc77';
+            ctx.shadowColor = '#ffcc77';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(px, py + 3, tam * 0.16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+
+      // Una persona del público, de espaldas: torso, cabeza (con pelo) y brazos.
+      function persona(x, y, k, color, brazos, telefono) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x - k, y, 2 * k, 2.4 * k);
+        ctx.fillStyle = PIEL;
+        ctx.fillRect(x - 0.55 * k, y - 1.15 * k, 1.1 * k, 1.1 * k);
+        ctx.fillStyle = '#2a1d16';
+        ctx.fillRect(x - 0.58 * k, y - 1.2 * k, 1.16 * k, 0.75 * k);
+        if (brazos) {
+          ctx.fillStyle = PIEL;
+          ctx.fillRect(x - 1.3 * k, y - 1.9 * k, 0.42 * k, 2.1 * k);
+          ctx.fillRect(x + 0.88 * k, y - 1.9 * k, 0.42 * k, 2.1 * k);
+        }
+        if (telefono) {
+          // Linterna del celular, con su halo
+          ctx.fillStyle = PIEL;
+          ctx.fillRect(x + 0.88 * k, y - 1.9 * k, 0.42 * k, 2.1 * k);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          const g = ctx.createRadialGradient(x + 1.1 * k, y - 2.1 * k, 0, x + 1.1 * k, y - 2.1 * k, k * 1.6);
+          g.addColorStop(0, 'rgba(255,248,208,0.9)');
+          g.addColorStop(0.2, 'rgba(255,248,208,0.25)');
+          g.addColorStop(1, 'rgba(255,248,208,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(x - 1.2 * k, y - 4.4 * k, 4.6 * k, 4.6 * k);
+          ctx.restore();
+        }
+      }
+
+      // Genera un público: personas repartidas en un rectángulo, más grandes cuanto
+      // más abajo (más cerca de la cámara). Se calcula una sola vez por escena.
+      const REMERAS = ['#111118', '#1a1a24', '#2b1a1f', '#1d2b3a', '#14141c', '#3a1520'];
+      function generarPublico(semilla, n, x0, x1, y0, y1, kMin, kMax, probBrazos = 0, probTel = 0) {
+        const azar = azarConSemilla(semilla);
+        const lista = [];
+        for (let i = 0; i < n; i++) {
+          const y = mezclar(y0, y1, Math.pow(azar(), 0.8));
+          const p = (y - y0) / (y1 - y0);
+          lista.push({
+            x: mezclar(x0, x1, azar()),
+            y,
+            k: mezclar(kMin, kMax, p),
+            color: REMERAS[Math.floor(azar() * REMERAS.length)],
+            brazos: azar() < probBrazos,
+            telefono: azar() < probTel,
+            fase: azar(),
+          });
+        }
+        return lista.sort((a, b) => a.y - b.y); // primero los de atrás
+      }
+
+      // Dibuja un público que salta con el ritmo. energia = cuánto saltan.
+      function dibujarPublico(lista, t, energia, transformar) {
+        for (const p of lista) {
+          const fase = (t * 2 + p.fase * 0.4) % 1;
+          const salto = energia * p.k * 1.3 * Math.pow(Math.sin(Math.PI * fase), 4);
+          if (transformar) {
+            const q = transformar(p);
+            if (q.y - q.k * 3 > H) continue;
+            persona(q.x, q.y - salto * q.k / p.k, q.k, p.color, p.brazos, p.telefono);
+          } else {
+            persona(p.x, p.y - salto, p.k, p.color, p.brazos, p.telefono);
+          }
+        }
+      }
+
+      // Oscurece la parte de abajo del cuadro: el público de adelante queda a contraluz
+      function contraluz(desde, fuerza = 0.6) {
+        const g = ctx.createLinearGradient(0, desde, 0, H);
+        g.addColorStop(0, 'rgba(5,3,12,0)');
+        g.addColorStop(1, `rgba(5,3,12,${fuerza})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(-100, desde, W + 200, H - desde + 200);
+      }
+
+      // Fuegos artificiales: suben y explotan. Todo depende solo del tiempo.
+      function fuegoArtificial(f, t) {
+        const dt = t - f.t;
+        if (dt < 0 || dt > 2.6) return;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        if (dt < 0.6) {
+          // la estela que sube
+          const p = dt / 0.6;
+          const y = mezclar(H * 0.7, f.y, salidaRapida(p));
+          ctx.fillStyle = '#ffe9b0';
+          ctx.shadowColor = '#ffe9b0';
+          ctx.shadowBlur = 20;
+          ctx.fillRect(f.x - 4, y, 8, 40);
+        } else {
+          // la explosión: chispas que se abren y caen
+          const e = dt - 0.6;
+          const radio = salidaRapida(limitar(e / 0.8)) * f.r;
+          ctx.globalAlpha = limitar(1 - e / 2);
+          ctx.fillStyle = f.c;
+          ctx.shadowColor = f.c;
+          ctx.shadowBlur = 25;
+          for (let i = 0; i < 36; i++) {
+            const a = (i / 36) * Math.PI * 2;
+            const px = f.x + Math.cos(a) * radio;
+            const py = f.y + Math.sin(a) * radio + e * e * 60;
+            ctx.beginPath();
+            ctx.arc(px, py, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(f.x + Math.cos(a) * radio * 0.6, f.y + Math.sin(a) * radio * 0.6 + e * e * 40, 4, 4);
+          }
+          // destello del centro
+          if (e < 0.25) {
+            ctx.globalAlpha = 1 - e / 0.25;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, 60, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      // Momentos de los fuegos (la música hace "bum" en t + 0,6, cuando explotan)
+      const FUEGOS = [
+        { t: 27.9, x: 300, y: 520, r: 230, c: '#ff66aa' },
+        { t: 28.7, x: 790, y: 420, r: 260, c: DORADO },
+        { t: 29.9, x: 540, y: 300, r: 200, c: CELESTE },
+        { t: 31.0, x: 230, y: 360, r: 210, c: '#ffffff' },
+        { t: 31.5, x: 860, y: 580, r: 220, c: ROJO },
+        { t: 32.4, x: 520, y: 520, r: 300, c: DORADO },
+      ];
+
+      // Los brazos del jugador en primera persona, levantados, rebotando con el ritmo
+      function brazosJugador(t, cuanto) {
+        const rebote = Math.pow(Math.abs(Math.sin(t * Math.PI * 2)), 2) * 40;
+        const alto = mezclar(H + 300, 1180, cuanto) - rebote;
+        ctx.fillStyle = '#e0b08c'; // un poco más claro que el público, para que se distingan
+        for (const lado of [-1, 1]) {
+          const base = W / 2 + lado * 360;
+          const mano = W / 2 + lado * 190;
+          ctx.beginPath();
+          ctx.moveTo(base - 110, H + 20);
+          ctx.lineTo(base + 110, H + 20);
+          ctx.lineTo(mano + 55, alto + 90);
+          ctx.lineTo(mano - 55, alto + 70);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = '#3a2418';
+          ctx.lineWidth = 6;
+          ctx.stroke();
+          // la mano (puño en alto)
+          ctx.beginPath();
+          ctx.roundRect(mano - 70, alto - 60, 140, 140, 26);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(mano - 70, alto + 10, 140, 12);
+          ctx.fillStyle = '#e0b08c';
+        }
+      }
+
+      // ---------------------------------------------------------------------
+      // Textos y carteles
+      // ---------------------------------------------------------------------
+
+      // Escribe un texto centrado en (x, y). Con anchoMax lo achica si no entra.
+      function texto(str, x, y, op = {}) {
+        const {
+          tam = 120,
+          fuente = 'Bebas Neue',
+          peso = '',
+          color = '#fff',
+          alinear = 'center',
+          borde = 0,
+          brillo = null,
+          gradiente = null,
+          anchoMax = 980,
+          espaciado = 0,
+        } = op;
+        ctx.save();
+        let size = tam;
+        const fijarFuente = () => (ctx.font = `${peso} ${size}px "${fuente}", Impact, Arial, sans-serif`);
+        fijarFuente();
+        ctx.letterSpacing = espaciado + 'px';
+        const ancho = ctx.measureText(str).width;
+        if (ancho > anchoMax) {
+          size *= anchoMax / ancho;
+          fijarFuente();
+        }
+        ctx.textAlign = alinear;
+        ctx.textBaseline = 'middle';
+        let relleno = color;
+        if (gradiente) {
+          const w = ctx.measureText(str).width;
+          const g = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+          gradiente.forEach((c, i) => g.addColorStop(i / (gradiente.length - 1), c));
+          relleno = g;
+        }
+        if (borde) {
+          ctx.lineWidth = borde;
+          ctx.strokeStyle = '#0d0a1f';
+          ctx.lineJoin = 'round';
+          ctx.strokeText(str, x, y);
+        }
+        if (brillo) {
+          ctx.shadowColor = brillo;
+          ctx.shadowBlur = 50;
+        }
+        ctx.fillStyle = relleno;
+        ctx.fillText(str, x, y);
+        ctx.restore();
+      }
+
+      // Texto que "cae" de golpe: entra grande, se clava en su lugar y tiembla.
+      // Con glitch, al caer se separa en rojo y celeste por un instante.
+      function golpe(str, t, t0, t1, x, y, op = {}) {
+        if (t < t0 || t > t1) return;
+        const p = t - t0;
+        const entrada = limitar(p / 0.16);
+        const salida = limitar((t1 - t) / 0.12);
+        const escala = 1 + (1 - salidaRapida(entrada)) * 1.2;
+        const temblor = Math.max(0, 1 - p / 0.35) * 14;
+        ctx.save();
+        ctx.globalAlpha = limitar(entrada * 2) * salida;
+        ctx.translate(x + Math.sin(p * 97) * temblor, y + Math.cos(p * 83) * temblor);
+        ctx.scale(escala, escala);
+        if (op.glitch && p < 0.3) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          texto(str, -14, 0, { ...op, color: ROJO, gradiente: null, brillo: null, borde: 0 });
+          texto(str, 14, 0, { ...op, color: CELESTE, gradiente: null, brillo: null, borde: 0 });
+          ctx.restore();
+        }
+        texto(str, 0, 0, op);
+        ctx.restore();
+      }
+
+      // Texto que sube suave desde abajo y aparece
+      function sube(str, t, t0, t1, x, y, op = {}) {
+        if (t < t0 || t > t1) return;
+        const entrada = salidaRapida(limitar((t - t0) / 0.35));
+        const salida = limitar((t1 - t) / 0.2);
+        ctx.save();
+        ctx.globalAlpha = entrada * salida;
+        texto(str, x, y + (1 - entrada) * 60, op);
+        ctx.restore();
+      }
+
+      // Cartel tipo "píldora" con fondo oscuro y borde de color (como los del juego)
+      function pildora(str, x, y, color, op = {}) {
+        const { tam = 46, alfa = 1 } = op;
+        ctx.save();
+        ctx.globalAlpha = alfa;
+        ctx.font = `600 ${tam}px "Barlow", Arial, sans-serif`;
+        const w = ctx.measureText(str).width + tam * 1.4;
+        const h = tam * 1.8;
+        ctx.fillStyle = 'rgba(12,8,30,0.72)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = alfa;
+        texto(str, x, y + 2, { tam, fuente: 'Barlow', peso: '600' });
+        ctx.restore();
+      }
+
+      // El reloj del festival arriba a la izquierda, como en el juego
+      function reloj(hora) {
+        ctx.fillStyle = 'rgba(12,8,30,0.6)';
+        ctx.beginPath();
+        ctx.roundRect(54, 120, 210, 92, 14);
+        ctx.fill();
+        texto(hora, 159, 168, { tam: 70 });
+      }
+
+      // Una tecla del teclado dibujada (para mostrar los controles)
+      function tecla(letra, x, y, s = 1, alfa = 1) {
+        ctx.save();
+        ctx.globalAlpha = alfa;
+        const w = (letra.length > 1 ? 330 : 150) * s;
+        const h = 150 * s;
+        ctx.fillStyle = '#e8e4f0';
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2, y - h / 2 + 14 * s, w, h, 22 * s);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2, y - h / 2, w, h - 8 * s, 22 * s);
+        ctx.fill();
+        texto(letra, x, y - 2 * s, { tam: (letra.length > 1 ? 70 : 100) * s, color: '#0d0a1f' });
+        ctx.restore();
+      }
+
+      // El aguante-metro: barra con degradé dorado → rojo, como en el juego
+      function aguanteMetro(valor, y, t, brilla = false) {
+        const w = 760;
+        const x = (W - w) / 2;
+        texto('AGUANTE', W / 2, y - 62, { tam: 54, espaciado: 6 });
+        ctx.fillStyle = 'rgba(12,8,30,0.75)';
+        ctx.beginPath();
+        ctx.roundRect(x, y - 22, w, 44, 22);
+        ctx.fill();
+        const g = ctx.createLinearGradient(x, 0, x + w, 0);
+        g.addColorStop(0, DORADO);
+        g.addColorStop(1, ROJO);
+        ctx.save();
+        if (brilla) {
+          ctx.shadowColor = DORADO;
+          ctx.shadowBlur = 40 + 30 * pulso(t);
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(x + 6, y - 16, Math.max(32, (w - 12) * valor), 32, 16);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ---------------------------------------------------------------------
+      // ESCENAS. Cada una recibe el tiempo local (lt, desde que empieza la escena)
+      // y el tiempo total (t), que se usa para el ritmo.
+      // ---------------------------------------------------------------------
+
+      // 0 a 3 s · El gancho: dos frases que caen con los golpes de la música
+      function escenaGancho(lt, t) {
+        ctx.fillStyle = '#05030c';
+        ctx.fillRect(0, 0, W, H);
+        // resplandor rojo que late con los golpes
+        const golpeFuerte = Math.max(Math.exp(-lt * 3), lt > 1.5 ? Math.exp(-(lt - 1.5) * 3) : 0);
+        const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 900);
+        g.addColorStop(0, `rgba(255,51,85,${0.15 + 0.35 * golpeFuerte})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        golpe('NO LO MIRÁS.', lt, 0.05, 1.45, W / 2, H / 2 - 40, { tam: 210, glitch: true, borde: 0 });
+        golpe('LO VIVÍS.', lt, 1.5, 3.0, W / 2, H / 2 - 40, {
+          tam: 300,
+          glitch: true,
+          gradiente: [DORADO, ROJO, VIOLETA],
+          brillo: 'rgba(255,51,85,0.8)',
+        });
+        sube('UN FESTIVAL DE ROCK EN PRIMERA PERSONA', lt, 2.0, 3.0, W / 2, H / 2 + 170, {
+          tam: 40,
+          fuente: 'Barlow',
+          peso: '800',
+          color: 'rgba(255,255,255,0.85)',
+          espaciado: 3,
+        });
+      }
+
+      // 3 a 8 s · El predio al atardecer con los tres escenarios tocando a la vez
+      const PUB_ROJO_LEJOS = generarPublico(11, 120, 390, 690, 1135, 1300, 6, 11, 0.3);
+      const PUB_AMBAR_LEJOS = generarPublico(12, 50, 80, 270, 1110, 1190, 4, 6, 0.2);
+      const PUB_CELESTE_LEJOS = generarPublico(13, 50, 810, 1000, 1110, 1190, 4, 6, 0.2);
+      const PUB_FRENTE = generarPublico(14, 46, -40, 1120, 1560, 1980, 34, 54, 0.45);
+
+      function escenaPredio(lt, t) {
+        const z = 1 + 0.14 * suave(limitar(lt / 5));
+        ctx.save();
+        ctx.translate(W / 2, H * 0.62);
+        ctx.scale(z, z);
+        ctx.translate(-W / 2, -H * 0.62);
+        cielo(ATARDECER, 1080);
+        // sol con halo
+        const gs = ctx.createRadialGradient(820, 980, 0, 820, 980, 260);
+        gs.addColorStop(0, 'rgba(255,224,160,1)');
+        gs.addColorStop(0.3, 'rgba(255,224,160,0.6)');
+        gs.addColorStop(1, 'rgba(255,224,160,0)');
+        ctx.fillStyle = gs;
+        ctx.fillRect(500, 700, 700, 600);
+        // la sierra
+        ctx.fillStyle = 'rgba(58,44,74,0.92)';
+        ctx.beginPath();
+        ctx.moveTo(-200, 1090);
+        [[-200, 1010], [90, 930], [260, 990], [470, 900], [700, 980], [880, 920], [1280, 1000], [1280, 1090]].forEach(
+          ([x, y]) => ctx.lineTo(x, y),
+        );
+        ctx.fill();
+        // pasto y camino de tierra
+        const gp = ctx.createLinearGradient(0, 1080, 0, H);
+        gp.addColorStop(0, '#2f6b2a');
+        gp.addColorStop(1, '#173a14');
+        ctx.fillStyle = gp;
+        ctx.fillRect(-300, 1080, W + 600, H);
+        ctx.fillStyle = 'rgba(122,90,58,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(500, 1100);
+        ctx.lineTo(580, 1100);
+        ctx.lineTo(960, H + 100);
+        ctx.lineTo(120, H + 100);
+        ctx.fill();
+        // los tres escenarios, cada uno con su música
+        escenario(170, 1100, 1.05, AMBAR, t + 1);
+        escenario(910, 1100, 1.05, CELESTE, t + 2);
+        escenario(540, 1125, 2.1, ROJO, t);
+        ondas(170, 1010, AMBAR, t + 0.3, 260);
+        ondas(910, 1010, CELESTE, t + 0.6, 260);
+        ondas(540, 960, ROJO, t, 380);
+        dibujarPublico(PUB_AMBAR_LEJOS, t, 0.3);
+        dibujarPublico(PUB_CELESTE_LEJOS, t, 0.3);
+        dibujarPublico(PUB_ROJO_LEJOS, t, 0.4);
+        dibujarPublico(PUB_FRENTE, t, 0.15);
+        contraluz(1450, 0.6);
+        banderines(-60, W + 60, 300, 60, 18, 64, t);
+        ctx.restore();
+        reloj('18:02');
+        golpe('3 ESCENARIOS', lt, 0.35, 4.9, W / 2, 560, { tam: 190, borde: 14 });
+        sube('TOCANDO AL MISMO TIEMPO', lt, 1.0, 4.9, W / 2, 700, { tam: 86, borde: 10, color: DORADO });
+        sube('¿A dónde vas primero?', lt, 2.6, 4.95, W / 2, 1440, { tam: 64, fuente: 'Barlow', peso: '800', borde: 12 });
+      }
+
+      // 8 a 14 s · Caminata hacia el escenario rojo: la banda crece, las otras se apagan
+      const PUB_CAMINO = generarPublico(21, 170, -1, 1, 0, 1, 0, 1, 0.35);
+
+      function escenaCaminata(lt, t) {
+        const p = suave(limitar(lt / 5.8));
+        const vaiven = Math.sin(lt * 10) * 8; // el paso al caminar
+        ctx.save();
+        ctx.translate(0, vaiven);
+        cieloMezcla(ANOCHECER, NOCHE, p, 1050);
+        estrellas(t, p);
+        const horizonte = 1020;
+        ctx.fillStyle = '#163012';
+        ctx.fillRect(-100, horizonte, W + 200, H);
+        ctx.fillStyle = 'rgba(122,90,58,0.7)';
+        ctx.beginPath();
+        ctx.moveTo(470, horizonte);
+        ctx.lineTo(610, horizonte);
+        ctx.lineTo(1000, H + 50);
+        ctx.lineTo(80, H + 50);
+        ctx.fill();
+        const s = 1.6 + 3.4 * p;
+        const base = horizonte + 30 + 330 * p;
+        escenario(540, base, s, ROJO, t, 0.8 + 0.6 * p);
+        ondas(540, base - 50 * s, ROJO, t, 300 + 500 * p, 1);
+        // el público crece a medida que el jugador se acerca
+        dibujarPublico(PUB_CAMINO, t, 0.6, (q) => {
+          const y = mezclar(base + 10, H + 220, q.y);
+          const k = (6 + 70 * q.y * q.y) * (0.7 + 0.9 * p);
+          return { x: 540 + q.x * (260 + 900 * q.y) * (0.8 + 0.5 * p), y, k };
+        });
+        contraluz(1300, 0.7);
+        ctx.restore();
+        reloj('21:03');
+        golpe('SEGUÍ', lt, 0.2, 5.9, W / 2, 420, { tam: 200, borde: 14 });
+        golpe('EL SONIDO', lt, 0.7, 5.9, W / 2, 590, { tam: 200, borde: 14, color: ROJO, brillo: 'rgba(255,51,85,0.6)' });
+        // indicador del tema que suena, con su "volumen" que crece
+        if (lt > 1.2) {
+          const alfa = limitar((lt - 1.2) / 0.3) * limitar((6 - lt) / 0.2);
+          pildora('♪  Ciro y los Persas · Astros', W / 2, 1620, ROJO, { alfa });
+          const distancia = Math.round(mezclar(78, 12, p));
+          ctx.save();
+          ctx.globalAlpha = alfa;
+          texto(`a ${distancia} m del escenario`, W / 2, 1730, { tam: 40, fuente: 'Barlow', peso: '600', color: 'rgba(255,255,255,0.8)' });
+          for (let i = 0; i < 10; i++) {
+            const lleno = i / 10 < 0.15 + 0.85 * p;
+            ctx.fillStyle = lleno ? (i > 7 ? ROJO : DORADO) : 'rgba(255,255,255,0.15)';
+            const alto = 20 + i * 7 + (lleno ? pulso(t) * 10 : 0);
+            ctx.fillRect(W / 2 - 190 + i * 40, 1830 - alto, 28, alto);
+          }
+          ctx.restore();
+        }
+      }
+
+      // 14 a 22 s · Adentro del público: las acciones del recital
+      const PUB_ADENTRO = generarPublico(31, 260, -60, 1140, 800, 1980, 10, 58, 0.4);
+
+      function escenaPublico(lt, t) {
+        const pogo = lt > 3 && lt < 4.6;
+        const fuerza = pogo ? 26 : 7 + 6 * pulso(t);
+        ctx.save();
+        ctx.translate(Math.sin(t * 41) * fuerza, Math.cos(t * 37) * fuerza);
+        ctx.rotate(Math.sin(t * 5) * (pogo ? 0.03 : 0.008));
+        cielo(NOCHE, 900);
+        estrellas(t, 0.6);
+        escenario(540, 780, 2.8, ROJO, t, 1.4);
+        // flashes de luz con el bajo, como en el juego
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(255,51,85,${0.18 * pulso(t)})`;
+        ctx.fillRect(-100, -100, W + 200, H + 200);
+        ctx.restore();
+        dibujarPublico(PUB_ADENTRO, t, pogo ? 1.6 : 1);
+        contraluz(1000, 0.75);
+        brazosJugador(t, limitar(lt / 0.4));
+        ctx.restore();
+
+        // Las acciones, una por pulso doble, con su tecla
+        const acciones = [
+          ['SALTÁ', 'ESPACIO'],
+          ['CANTÁ', 'Q'],
+          ['BRAZOS ARRIBA', 'E'],
+          ['POGO', 'F'],
+        ];
+        acciones.forEach(([palabra, letra], i) => {
+          const t0 = i * 1.0 + (i === 3 ? 0 : 0);
+          const t1 = i === 3 ? 4.5 : t0 + 0.98;
+          golpe(palabra, lt, t0, t1, W / 2, 470, { tam: i === 3 ? 330 : 230, borde: 16, glitch: i === 3 });
+          if (lt >= t0 && lt <= t1) tecla(letra, W / 2, 700, 1, limitar((lt - t0) / 0.1));
+        });
+        // Contagio: anillos dorados que se expanden desde el jugador
+        if (lt > 4.5) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < 3; i++) {
+            const f = ((lt - 4.5) * 0.8 + i / 3) % 1;
+            ctx.strokeStyle = DORADO;
+            ctx.globalAlpha = (1 - f) * 0.7;
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.ellipse(W / 2, 1500, 100 + f * 700, 40 + f * 260, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.restore();
+          golpe('EL PÚBLICO', lt, 4.6, 7.9, W / 2, 440, { tam: 200, borde: 16 });
+          golpe('SE CONTAGIA', lt, 5.1, 7.9, W / 2, 620, { tam: 200, borde: 16, color: DORADO, brillo: 'rgba(255,204,51,0.6)' });
+        }
+        aguanteMetro(limitar(lt / 7.8), 1780, t, lt > 7.6);
+      }
+
+      // 22 a 27 s · ¡AGUANTE! El cantante se da vuelta y saluda
+      const PUB_AGUANTE = generarPublico(41, 50, -60, 1140, 1460, 2000, 44, 70, 0.6);
+      const PAPELITOS = (() => {
+        const azar = azarConSemilla(5);
+        const colores = [ROJO, AMBAR, CELESTE, DORADO, '#ffffff', VIOLETA];
+        return Array.from({ length: 140 }, () => ({
+          x: azar() * W,
+          v: 250 + azar() * 450,
+          giro: azar() * 10,
+          d: azar() * 0.6,
+          c: colores[Math.floor(azar() * colores.length)],
+        }));
+      })();
+
+      function escenaAguante(lt, t) {
+        cielo(NOCHE, 900);
+        // la pantalla gigante, roja, que llena el fondo
+        ctx.save();
+        ctx.shadowColor = ROJO;
+        ctx.shadowBlur = 80 * (0.6 + 0.6 * pulso(t));
+        ctx.fillStyle = ROJO;
+        ctx.globalAlpha = 0.55 + 0.25 * pulso(t);
+        ctx.fillRect(90, 260, 900, 620);
+        ctx.restore();
+        ctx.fillStyle = '#17171f';
+        ctx.fillRect(0, 1240, W, 300);
+        // el cantante (tapado negro, como Ciro) de frente, saludando
+        const k = 46;
+        const cx = W / 2;
+        const cy = 820;
+        ctx.fillStyle = '#121216';
+        ctx.fillRect(cx - 2.6 * k, cy, 5.2 * k, 6.8 * k); // tapado largo
+        ctx.fillStyle = '#2b3550';
+        ctx.fillRect(cx - 1.6 * k, cy + 6.8 * k, 1.3 * k, 2.4 * k); // piernas
+        ctx.fillRect(cx + 0.3 * k, cy + 6.8 * k, 1.3 * k, 2.4 * k);
+        ctx.fillStyle = PIEL;
+        ctx.fillRect(cx - 1.4 * k, cy - 3 * k, 2.8 * k, 2.8 * k); // cara
+        ctx.fillStyle = '#1a120e';
+        ctx.fillRect(cx - 1.45 * k, cy - 3.1 * k, 2.9 * k, 0.8 * k); // pelo
+        ctx.fillStyle = '#111';
+        ctx.fillRect(cx - 0.8 * k, cy - 1.8 * k, 0.35 * k, 0.35 * k); // ojos
+        ctx.fillRect(cx + 0.45 * k, cy - 1.8 * k, 0.35 * k, 0.35 * k);
+        ctx.fillRect(cx - 0.5 * k, cy - 0.9 * k, 1.0 * k, 0.25 * k); // sonrisa
+        ctx.fillStyle = '#121216';
+        ctx.fillRect(cx - 3.4 * k, cy + 0.3 * k, 0.9 * k, 4 * k); // brazo quieto
+        // brazo que saluda, moviéndose de un lado a otro
+        ctx.save();
+        ctx.translate(cx + 2.6 * k, cy + 0.6 * k);
+        ctx.rotate(-2.5 + Math.sin(lt * 9) * 0.35);
+        ctx.fillStyle = '#121216';
+        ctx.fillRect(-0.45 * k, 0, 0.9 * k, 4 * k);
+        ctx.fillStyle = PIEL;
+        ctx.fillRect(-0.55 * k, 4 * k, 1.1 * k, 1.1 * k);
+        ctx.restore();
+        // papelitos que caen
+        for (const p of PAPELITOS) {
+          const e = lt - p.d;
+          if (e < 0) continue;
+          const y = -40 + e * p.v;
+          if (y > H) continue;
+          ctx.save();
+          ctx.translate(p.x + Math.sin(e * 3 + p.giro) * 40, y);
+          ctx.rotate(e * p.giro);
+          ctx.fillStyle = p.c;
+          ctx.fillRect(-10, -6, 20, 12);
+          ctx.restore();
+        }
+        dibujarPublico(PUB_AGUANTE, t, 1.4);
+        contraluz(1450, 0.7);
+        golpe('¡AGUANTE!', lt, 0.0, 4.95, W / 2, 250, {
+          tam: 270,
+          glitch: true,
+          borde: 18,
+          color: DORADO,
+          brillo: 'rgba(255,204,51,0.9)',
+        });
+        sube('LA BANDA TE RESPONDE', lt, 0.8, 4.95, W / 2, 1650, { tam: 96, borde: 12 });
+        aguanteMetro(1, 1800, t, true);
+      }
+
+      // 27 a 34 s · De la tarde a la noche: fuegos artificiales y linternas
+      const PUB_NOCHE = generarPublico(51, 280, -60, 1140, 1240, 1990, 10, 60, 0.15, 0.3);
+
+      function escenaNoche(lt, t) {
+        const p = suave(limitar(lt / 2.2)); // en 2 segundos pasa de las 18 a las 21
+        cieloMezcla(ATARDECER, NOCHE, p, 1250);
+        estrellas(t, p);
+        ctx.fillStyle = '#0f1d0c';
+        ctx.fillRect(0, 1200, W, H);
+        for (const f of FUEGOS) fuegoArtificial(f, t);
+        escenario(540, 1250, 2.4, CELESTE, t, 0.6 + 0.8 * p);
+        dibujarPublico(PUB_NOCHE, t, 0.7);
+        contraluz(1350, 0.6);
+        const minutos = Math.round(mezclar(18 * 60, 21 * 60 + 40, p));
+        reloj(`${Math.floor(minutos / 60)}:${String(minutos % 60).padStart(2, '0')}`);
+        golpe('DEL ATARDECER', lt, 0.2, 6.9, W / 2, 330, { tam: 170, borde: 14 });
+        golpe('A LA NOCHE', lt, 0.9, 6.9, W / 2, 490, { tam: 230, borde: 16, color: CELESTE, brillo: 'rgba(51,170,255,0.7)' });
+        sube('fuegos · linternas · ovaciones', lt, 2.8, 6.9, W / 2, 1720, {
+          tam: 58,
+          fuente: 'Barlow',
+          peso: '800',
+          borde: 10,
+          espaciado: 2,
+        });
+      }
+
+      // 34 a 40 s · El line up: un nombre por pulso
+      const LINEUP = [
+        ['GUASONES', ROJO, 'ESCENARIO ROJO · 18:00'],
+        ['CALLEJEROS', ROJO, 'ESCENARIO ROJO · 19:30'],
+        ['CIRO Y LOS PERSAS', ROJO, 'ESCENARIO ROJO · 21:00'],
+        ['TURF', AMBAR, 'ESCENARIO ÁMBAR · 18:10'],
+        ['INTOXICADOS', AMBAR, 'ESCENARIO ÁMBAR · 19:40'],
+        ['LAS PASTILLAS DEL ABUELO', AMBAR, 'ESCENARIO ÁMBAR · 21:10'],
+        ['NO TE VA GUSTAR', CELESTE, 'ESCENARIO CELESTE · 18:20'],
+        ['LA VELA PUERCA', CELESTE, 'ESCENARIO CELESTE · 19:50'],
+        ['ANDRÉS CALAMARO', CELESTE, 'ESCENARIO CELESTE · 21:20'],
+      ];
+
+      function escenaLineup(lt, t) {
+        ctx.fillStyle = '#0d0a1f';
+        ctx.fillRect(0, 0, W, H);
+        if (lt < 1) {
+          golpe('9 BANDAS', lt, 0.0, 1.0, W / 2, 820, { tam: 260, glitch: true });
+          golpe('19 TEMAS', lt, 0.5, 1.0, W / 2, 1060, { tam: 200, color: DORADO });
+          return;
+        }
+        const i = Math.min(8, Math.floor((lt - 1) / 0.5));
+        const lti = lt - 1 - i * 0.5;
+        const [nombre, color, detalle] = LINEUP[i];
+        // franjas diagonales del color del escenario, corriendo
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = color;
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(-0.22);
+        const corrimiento = (lt * 400) % 260;
+        for (let k = -8; k < 8; k++) ctx.fillRect(k * 260 + corrimiento, -1400, 120, 2800);
+        ctx.restore();
+        ctx.fillStyle = 'rgba(13,10,31,0.55)';
+        ctx.fillRect(0, 0, W, H);
+        // los nombres anteriores, chiquitos y apagados arriba (la grilla que se arma)
+        for (let j = 0; j < i; j++) {
+          texto(LINEUP[j][0], W / 2, 230 + j * 70, { tam: 56, color: 'rgba(255,255,255,0.35)' });
+        }
+        golpe(nombre, lti, 0, 0.5, W / 2, 1130, { tam: 230, borde: 18, anchoMax: 1000 });
+        texto(detalle, W / 2, 1300, { tam: 60, color, borde: 10 });
+      }
+
+      // 40 a 45 s · Cierre: vista aérea del predio y el nombre del festival
+      const PUB_AEREO = [
+        generarPublico(61, 70, 460, 620, 1015, 1075, 3, 4),
+        generarPublico(62, 70, 200, 340, 1350, 1410, 3.5, 5),
+        generarPublico(63, 70, 740, 880, 1350, 1410, 3.5, 5),
+      ];
+
+      function escenaFinal(lt, t) {
+        const z = 1.5 - 0.5 * salidaRapida(limitar(lt / 3));
+        cielo(NOCHE, 900);
+        estrellas(t);
+        ctx.save();
+        ctx.translate(W / 2, 1200);
+        ctx.scale(z, z);
+        ctx.translate(-W / 2, -1200);
+        ctx.fillStyle = '#11240e';
+        ctx.beginPath();
+        ctx.moveTo(-60, 1700);
+        ctx.lineTo(W + 60, 1700);
+        ctx.lineTo(900, 880);
+        ctx.lineTo(180, 880);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(122,90,58,0.9)';
+        ctx.beginPath();
+        ctx.ellipse(540, 1220, 150, 55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        banderines(400, 680, 1200, 10, 9, 22, t);
+        escenario(540, 1000, 0.9, ROJO, t);
+        escenario(270, 1330, 1.05, AMBAR, t + 1);
+        escenario(810, 1330, 1.05, CELESTE, t + 2);
+        PUB_AEREO.forEach((pub) => dibujarPublico(pub, t, 0.5));
+        ctx.restore();
+        // degradé oscuro arriba para que se lea el logo
+        const g = ctx.createLinearGradient(0, 0, 0, 900);
+        g.addColorStop(0, 'rgba(5,3,12,0.85)');
+        g.addColorStop(1, 'rgba(5,3,12,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, 900);
+        const logo = { tam: 250, gradiente: [DORADO, ROJO, VIOLETA], brillo: 'rgba(255,51,85,0.7)' };
+        golpe('SALVE SALVE', lt, 0.05, 5, W / 2, 360, logo);
+        golpe('ROCKANROL', lt, 0.4, 5, W / 2, 560, logo);
+        sube('EL FESTIVAL QUE ARMÁS VOS.', lt, 1.1, 5, W / 2, 720, { tam: 76, espaciado: 3 });
+        sube('Simulador 3D en primera persona · en tu navegador', lt, 2.0, 5, W / 2, 1640, {
+          tam: 40,
+          fuente: 'Barlow',
+          peso: '600',
+          color: 'rgba(255,255,255,0.85)',
+        });
+        if (lt > 2.6) pildora('CDEV · GRUPO 5 · UTN-FRC', W / 2, 1760, DORADO, { tam: 40, alfa: limitar((lt - 2.6) / 0.3) });
+      }
+
+      // Lista de escenas: [desde, hasta, función]
+      const ESCENAS = [
+        [0, 3, escenaGancho],
+        [3, 8, escenaPredio],
+        [8, 14, escenaCaminata],
+        [14, 22, escenaPublico],
+        [22, 27, escenaAguante],
+        [27, 34, escenaNoche],
+        [34, 40, escenaLineup],
+        [40, 45.5, escenaFinal],
+      ];
+      const CORTES = ESCENAS.map((e) => e[0]).slice(1);
+
+      // Textura de "grano" de película (se calcula una vez)
+      const grano = document.createElement('canvas');
+      grano.width = grano.height = 256;
+      (() => {
+        const g = grano.getContext('2d');
+        const datos = g.createImageData(256, 256);
+        const azar = azarConSemilla(3);
+        for (let i = 0; i < datos.data.length; i += 4) {
+          const v = azar() * 255;
+          datos.data[i] = datos.data[i + 1] = datos.data[i + 2] = v;
+          datos.data[i + 3] = 255;
+        }
+        g.putImageData(datos, 0, 0);
+      })();
+
+      // Dibuja el cuadro del segundo t
+      function dibujar(t) {
+        ctx.save();
+        const [desde, , escena] = ESCENAS.find((e) => t >= e[0] && t < e[1]) || ESCENAS[ESCENAS.length - 1];
+        escena(t - desde, t);
+        ctx.restore();
+
+        // Flash blanco en cada corte de escena
+        let flash = 0;
+        for (const c of CORTES) if (t >= c) flash = Math.max(flash, Math.exp(-(t - c) * 12));
+        if (flash > 0.01) {
+          ctx.fillStyle = `rgba(255,255,255,${flash * 0.75})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+        // Viñeta (bordes oscuros)
+        const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
+        v.addColorStop(0, 'rgba(0,0,0,0)');
+        v.addColorStop(1, 'rgba(0,0,0,0.55)');
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+        // Grano
+        ctx.save();
+        ctx.globalAlpha = 0.05;
+        ctx.globalCompositeOperation = 'overlay';
+        const ox = Math.floor((t * 997) % 256);
+        const oy = Math.floor((t * 613) % 256);
+        for (let x = -ox; x < W; x += 256) for (let y = -oy; y < H; y += 256) ctx.drawImage(grano, x, y);
+        ctx.restore();
+        // Fundido a negro al final
+        if (t > 44.2) {
+          ctx.fillStyle = `rgba(0,0,0,${limitar((t - 44.2) / 0.8)})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+        // Barra de progreso arriba
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(40, 50, W - 80, 6);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(40, 50, (W - 80) * limitar(t / DURACION), 6);
+      }
+
+      // =====================================================================
+      // MÚSICA (Web Audio): un rock original a 120 pulsos por minuto, con el
+      // mismo guion que la imagen. Todo se programa de una vez al dar play.
+      // =====================================================================
+      function programarMusica(ac, salida) {
+        const T = ac.currentTime + 0.15; // el segundo 0 del trailer
+
+        // Ruido blanco (base de la batería, el público y los aplausos)
+        const ruido = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+        const datos = ruido.getChannelData(0);
+        for (let i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
+
+        // Compresor (empareja el volumen) y limitador al final (que nada sature)
+        const comp = ac.createDynamicsCompressor();
+        comp.threshold.value = -20;
+        comp.ratio.value = 5;
+        comp.attack.value = 0.002;
+        const limitador = ac.createDynamicsCompressor();
+        limitador.threshold.value = -6;
+        limitador.knee.value = 0;
+        limitador.ratio.value = 20;
+        limitador.attack.value = 0.001;
+        limitador.release.value = 0.1;
+        const nivel = ac.createGain();
+        nivel.gain.value = 0.6;
+        comp.connect(nivel).connect(limitador).connect(salida);
+
+        // Filtro de "distancia": a lo lejos el sonido llega apagado (sin agudos)
+        // y se abre a medida que el jugador se acerca al escenario (8 a 14 s).
+        const lejos = ac.createBiquadFilter();
+        lejos.type = 'lowpass';
+        lejos.Q.value = 0.7;
+        lejos.connect(comp);
+        lejos.frequency.setValueAtTime(18000, T);
+        lejos.frequency.setValueAtTime(650, T + 3);
+        lejos.frequency.setValueAtTime(650, T + 8);
+        lejos.frequency.exponentialRampToValueAtTime(16000, T + 13.8);
+
+        // Un "bus" (volumen) por banda: A es la que elegimos; B y C, las otras dos
+        function bus(destino, puntos) {
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, T);
+          for (const [s, v] of puntos) g.gain.linearRampToValueAtTime(v, T + s);
+          g.connect(destino);
+          return g;
+        }
+        const bandaA = bus(lejos, [[2.99, 0], [3, 0.45], [8, 0.45], [12, 1], [44, 1], [45.5, 0]]);
+        const bandaB = bus(lejos, [[2.99, 0], [3, 0.4], [8, 0.4], [11, 0]]);
+        const bandaC = bus(lejos, [[2.99, 0], [3, 0.4], [8, 0.4], [11, 0]]);
+
+        // Distorsión de guitarra compartida por banda
+        const curva = new Float32Array(1024);
+        for (let i = 0; i < 1024; i++) {
+          const x = (i / 1023) * 2 - 1;
+          curva[i] = Math.tanh(x * 6);
+        }
+        function guitarra(destino, brillo) {
+          const d = ac.createWaveShaper();
+          d.curve = curva;
+          const lp = ac.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = brillo;
+          const g = ac.createGain();
+          g.gain.value = 0.32;
+          d.connect(lp);
+          lp.connect(g);
+          g.connect(destino);
+          return d;
+        }
+        const guitA = guitarra(bandaA, 3200);
+        const guitB = guitarra(bandaB, 2400);
+
+        // --- Instrumentos -------------------------------------------------
+        function envolvente(t, ataque, nivel, largo) {
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(nivel, t + ataque);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + largo);
+          return g;
+        }
+        function fuenteRuido(t, largo) {
+          const s = ac.createBufferSource();
+          s.buffer = ruido;
+          s.start(t, Math.random() * 1.5);
+          s.stop(t + largo);
+          return s;
+        }
+        function bombo(t, nivel = 1, destino = bandaA) {
+          const o = ac.createOscillator();
+          o.frequency.setValueAtTime(150, t);
+          o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
+          const g = envolvente(t, 0.003, nivel, 0.38);
+          o.connect(g).connect(destino);
+          o.start(t);
+          o.stop(t + 0.4);
+        }
+        function redoblante(t, nivel = 0.6, destino = bandaA) {
+          const f = ac.createBiquadFilter();
+          f.type = 'highpass';
+          f.frequency.value = 1400;
+          const g = envolvente(t, 0.002, nivel, 0.2);
+          fuenteRuido(t, 0.22).connect(f).connect(g).connect(destino);
+          const o = ac.createOscillator();
+          o.type = 'triangle';
+          o.frequency.value = 190;
+          const g2 = envolvente(t, 0.002, nivel * 0.6, 0.1);
+          o.connect(g2).connect(destino);
+          o.start(t);
+          o.stop(t + 0.12);
+        }
+        function platillo(t, nivel = 0.15, largo = 0.05, destino = bandaA) {
+          const f = ac.createBiquadFilter();
+          f.type = 'highpass';
+          f.frequency.value = 7000;
+          const g = envolvente(t, 0.002, nivel, largo);
+          fuenteRuido(t, largo + 0.02).connect(f).connect(g).connect(destino);
+        }
+        function crash(t, nivel = 0.4) {
+          platillo(t, nivel, 2.2, comp);
+        }
+        function acorde(t, raiz, largo, guit, nivel = 1) {
+          // "power chord": la nota, su quinta y su octava
+          const g = envolvente(t, 0.005, nivel, largo);
+          g.connect(guit);
+          for (const m of [1, 1.4983, 2]) {
+            const o = ac.createOscillator();
+            o.type = 'sawtooth';
+            o.frequency.value = raiz * m;
+            o.detune.value = (Math.random() - 0.5) * 14;
+            o.connect(g);
+            o.start(t);
+            o.stop(t + largo + 0.02);
+          }
+        }
+        function bajo(t, raiz, largo, destino = bandaA) {
+          const o = ac.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.value = raiz / 2;
+          const lp = ac.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = 500;
+          const g = envolvente(t, 0.005, 0.35, largo);
+          o.connect(lp).connect(g).connect(destino);
+          o.start(t);
+          o.stop(t + largo + 0.02);
+        }
+        function colchon(t, raiz, largo, destino) {
+          // acordes suaves (para la tercera banda, de fondo)
+          const g = envolvente(t, 0.15, 0.12, largo);
+          g.connect(destino);
+          for (const m of [1, 1.26, 1.5, 2]) {
+            const o = ac.createOscillator();
+            o.type = 'triangle';
+            o.frequency.value = raiz * 2 * m;
+            o.connect(g);
+            o.start(t);
+            o.stop(t + largo + 0.05);
+          }
+        }
+        function golpeGrave(t, nivel = 0.9) {
+          // "bum" de película: grave largo
+          const o = ac.createOscillator();
+          o.frequency.setValueAtTime(90, t);
+          o.frequency.exponentialRampToValueAtTime(32, t + 1.2);
+          const g = envolvente(t, 0.004, nivel, 1.6);
+          o.connect(g).connect(comp);
+          o.start(t);
+          o.stop(t + 1.7);
+          bombo(t, 1, comp);
+        }
+        function subida(t, largo, nivel = 0.25) {
+          // ruido que sube de tono antes de un golpe
+          const f = ac.createBiquadFilter();
+          f.type = 'bandpass';
+          f.Q.value = 2;
+          f.frequency.setValueAtTime(300, t);
+          f.frequency.exponentialRampToValueAtTime(9000, t + largo);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(nivel, t + largo);
+          g.gain.linearRampToValueAtTime(0, t + largo + 0.02);
+          fuenteRuido(t, largo + 0.05).connect(f).connect(g).connect(comp);
+        }
+        function aplausos(t, largo, nivel = 0.25) {
+          for (let s = 0; s < largo; s += 1 / 40) {
+            const ti = t + s + Math.random() * 0.02;
+            const f = ac.createBiquadFilter();
+            f.type = 'bandpass';
+            f.frequency.value = 900 + Math.random() * 1500;
+            const caida = Math.min(1, (largo - s) / (largo * 0.5));
+            const g = envolvente(ti, 0.002, nivel * (0.4 + Math.random() * 0.6) * caida, 0.05);
+            fuenteRuido(ti, 0.06).connect(f).connect(g).connect(comp);
+          }
+        }
+        function ovacion(t, largo, nivel = 0.4) {
+          // el grito del público: ruido "vocal" que crece y se apaga, más silbidos
+          const f = ac.createBiquadFilter();
+          f.type = 'bandpass';
+          f.frequency.value = 1100;
+          f.Q.value = 0.8;
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(nivel, t + 0.3);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + largo);
+          const s = ac.createBufferSource();
+          s.buffer = ruido;
+          s.loop = true;
+          s.connect(f).connect(g).connect(comp);
+          s.start(t);
+          s.stop(t + largo);
+          for (let i = 0; i < 4; i++) {
+            const ti = t + 0.2 + i * 0.35;
+            const o = ac.createOscillator();
+            o.frequency.setValueAtTime(1700 + i * 150, ti);
+            o.frequency.exponentialRampToValueAtTime(2600, ti + 0.5);
+            const gw = envolvente(ti, 0.05, 0.05, 0.6);
+            o.connect(gw).connect(comp);
+            o.start(ti);
+            o.stop(ti + 0.65);
+          }
+        }
+        function estallido(t) {
+          // fuego artificial: "bum" grave y chisporroteo
+          const o = ac.createOscillator();
+          o.frequency.setValueAtTime(110, t);
+          o.frequency.exponentialRampToValueAtTime(35, t + 0.5);
+          const g = envolvente(t, 0.003, 0.7, 0.7);
+          o.connect(g).connect(comp);
+          o.start(t);
+          o.stop(t + 0.75);
+          for (let i = 0; i < 14; i++) platillo(t + 0.1 + Math.random() * 0.8, 0.08, 0.04, comp);
+        }
+
+        // Ayuda para repetir algo cada cierto paso entre dos momentos
+        function cada(desde, hasta, paso, fn) {
+          let i = 0;
+          for (let s = desde; s < hasta - 1e-6; s += paso) fn(T + s, i++);
+        }
+
+        // --- Notas -----------------------------------------------------------
+        const E = 82.41, G = 98.0, A = 110.0, D = 73.42, B = 61.74, C = 65.41;
+        const RIFF = [
+          [E, E, 0, E, G, 0, A, G], // compás 1 (cada lugar es una corchea de 0,25 s)
+          [E, E, 0, E, D, 0, B, D], // compás 2
+        ];
+        function tocarRiff(desde, hasta, nivel = 1) {
+          cada(desde, hasta, 0.25, (t, i) => {
+            const compas = Math.floor(i / 8) % 2;
+            const nota = RIFF[compas][i % 8];
+            if (!nota) return;
+            const siguienteVacia = !RIFF[compas][(i + 1) % 8];
+            const largo = siguienteVacia ? 0.46 : 0.22;
+            acorde(t, nota, largo, guitA, nivel);
+            bajo(t, nota, largo);
+          });
+        }
+        // Batería de rock: bombo en 1, "y" del 2 y 3; redoblante en 2 y 4; platillo en corcheas
+        function bateria(desde, hasta, nivel = 1) {
+          cada(desde, hasta, 0.25, (t, i) => {
+            const lugar = i % 8;
+            if (lugar === 0 || lugar === 3 || lugar === 4) bombo(t, nivel);
+            if (lugar === 2 || lugar === 6) redoblante(t, 0.6 * nivel);
+            platillo(t, 0.12 * nivel);
+          });
+        }
+        function redoble(desde, hasta) {
+          cada(desde, hasta, 0.125, (t, i) => redoblante(t, 0.2 + (i / ((hasta - desde) * 8)) * 0.5));
+        }
+
+        // 0 a 3 s · gancho: dos golpes graves y una subida
+        golpeGrave(T + 0.05);
+        golpeGrave(T + 1.5, 1);
+        subida(T + 2.0, 1.0, 0.2);
+
+        // Público de fondo durante todo el trailer
+        const multitud = ac.createBufferSource();
+        multitud.buffer = ruido;
+        multitud.loop = true;
+        const fm = ac.createBiquadFilter();
+        fm.type = 'bandpass';
+        fm.frequency.value = 900;
+        fm.Q.value = 0.6;
+        const gm = ac.createGain();
+        gm.gain.setValueAtTime(0, T);
+        [[3, 0.03], [8, 0.04], [14, 0.08], [22, 0.12], [34, 0.08], [40, 0.12], [45, 0]].forEach(([s, v]) =>
+          gm.gain.linearRampToValueAtTime(v, T + s),
+        );
+        multitud.connect(fm).connect(gm).connect(comp);
+        multitud.start(T);
+        multitud.stop(T + 46);
+
+        // 3 a 8 s · las tres bandas a la vez, apagadas por la distancia
+        tocarRiff(3, 12);
+        cada(3, 12, 1.0, (t) => bombo(t, 0.7));
+        cada(3, 12, 0.5, (t) => platillo(t, 0.08));
+        cada(3, 11, 0.5, (t, i) => acorde(t, [A, A, 130.81, 146.83][i % 4], 0.45, guitB, 0.8));
+        cada(3, 11, 1.0, (t, i) => colchon(t, [146.83, 123.47, 98.0, 110.0][i % 4], 1.0, bandaC));
+
+        // 8 a 14 s · la caminata: entra la batería de a poco y se abre el sonido
+        cada(8, 12, 0.5, (t) => bombo(t, 0.9));
+        cada(10, 12, 0.25, (t) => platillo(t, 0.1));
+        cada(11, 12, 1.0, (t) => redoblante(t + 0.5, 0.5));
+        tocarRiff(12, 13);
+        bateria(12, 13);
+        redoble(13, 14);
+        subida(T + 12.5, 1.5, 0.22);
+
+        // 14 a 22 s · adentro del público: el tema a pleno
+        crash(T + 14);
+        golpeGrave(T + 14, 0.6);
+        tocarRiff(14, 22);
+        bateria(14, 21);
+        redoble(21, 22);
+        subida(T + 20.8, 1.2, 0.25);
+
+        // 22 a 27 s · ¡AGUANTE!: golpe, ovación y medio tiempo
+        crash(T + 22, 0.5);
+        golpeGrave(T + 22, 1);
+        ovacion(T + 22, 4.5, 0.45);
+        cada(22, 27, 2.0, (t, i) => {
+          const raiz = [E, C, D][i % 3];
+          acorde(t, raiz, 1.9, guitA, 0.9);
+          bajo(t, raiz, 1.9);
+        });
+        cada(22, 27, 0.5, (t, i) => (i % 4 === 0 ? bombo(t) : i % 4 === 2 ? redoblante(t, 0.7) : platillo(t, 0.15, 0.3)));
+
+        // 27 a 34 s · la noche: el tema sigue, con fuegos artificiales y aplausos
+        crash(T + 27);
+        tocarRiff(27, 34);
+        bateria(27, 33);
+        redoble(33, 34);
+        for (const f of FUEGOS) estallido(T + f.t + 0.6);
+        aplausos(T + 27, 3.5, 0.18);
+
+        // 34 a 40 s · line up: un golpe por banda
+        crash(T + 34);
+        tocarRiff(34, 39);
+        cada(34, 39, 0.5, (t) => bombo(t, 1));
+        cada(34, 39, 0.25, (t) => platillo(t, 0.14));
+        cada(35, 39.5, 0.5, (t) => redoblante(t, 0.35));
+        redoble(39, 40);
+        subida(T + 38.5, 1.5, 0.3);
+
+        // 40 a 45 s · cierre: golpe final, acorde que queda sonando y ovación
+        crash(T + 40, 0.6);
+        golpeGrave(T + 40, 1);
+        acorde(T + 40, E, 4.8, guitA, 1);
+        bajo(T + 40, E, 4.5);
+        ovacion(T + 40.2, 4.5, 0.35);
+        aplausos(T + 40.5, 4, 0.18);
+
+        return T;
+      }
+
+      // =====================================================================
+      // REPRODUCCIÓN Y GRABACIÓN
+      // =====================================================================
+      let audio = null; // el AudioContext; su reloj es el reloj del trailer
+      let inicio = 0; // momento (en el reloj del audio) en que empieza el segundo 0
+      let grabador = null;
+      let partes = [];
+      const btnPlay = document.getElementById('btn-play');
+      const estado = document.getElementById('estado');
+
+      function tiempoActual() {
+        return audio ? Math.max(0, audio.currentTime - inicio) : 0;
+      }
+
+      function empezar(grabar) {
+        if (audio) audio.close();
+        audio = new AudioContext();
+        const volumen = audio.createGain();
+        volumen.gain.value = 0.85;
+        volumen.connect(audio.destination);
+        inicio = programarMusica(audio, volumen);
+        btnPlay.textContent = '❚❚ Pausa';
+
+        if (grabar) {
+          // Grabamos lo que se ve en el canvas + lo que suena
+          const destino = audio.createMediaStreamDestination();
+          volumen.connect(destino);
+          const flujo = new MediaStream([
+            ...lienzo.captureStream(30).getVideoTracks(),
+            ...destino.stream.getAudioTracks(),
+          ]);
+          const formatos = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+          const formato = formatos.find((f) => MediaRecorder.isTypeSupported(f));
+          partes = [];
+          grabador = new MediaRecorder(flujo, { mimeType: formato, videoBitsPerSecond: 12_000_000 });
+          grabador.ondataavailable = (e) => partes.push(e.data);
+          grabador.onstop = descargar;
+          grabador.start();
+          document.body.classList.add('grabando');
+          estado.textContent = 'Grabando… no cambies de pestaña hasta que termine.';
+        }
+      }
+
+      function descargar() {
+        const tipo = grabador.mimeType;
+        const blob = new Blob(partes, { type: tipo });
+        const enlace = document.createElement('a');
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = 'salve-salve-rockanrol-trailer.' + (tipo.includes('mp4') ? 'mp4' : 'webm');
+        enlace.click();
+        grabador = null;
+        document.body.classList.remove('grabando');
+        estado.textContent = 'Listo: el video se descargó.';
+      }
+
+      btnPlay.onclick = () => {
+        if (!audio || tiempoActual() > DURACION) return empezar(false);
+        if (audio.state === 'running') {
+          audio.suspend(); // pausar el audio también frena el reloj del video
+          btnPlay.textContent = '▶ Seguir';
+        } else {
+          audio.resume();
+          btnPlay.textContent = '❚❚ Pausa';
+        }
+      };
+      document.getElementById('btn-reiniciar').onclick = () => empezar(false);
+      document.getElementById('btn-grabar').onclick = () => empezar(true);
+
+      // Bucle de dibujo: en cada cuadro dibujamos el segundo que marca el reloj
+      function bucle() {
+        const t = tiempoActual();
+        // antes de dar play mostramos la portada (el cierre con el logo)
+        dibujar(audio ? Math.min(t, DURACION) : 41.5);
+        if (t > DURACION + 0.3) {
+          if (grabador && grabador.state === 'recording') grabador.stop();
+          btnPlay.textContent = '▶ Reproducir';
+        }
+        requestAnimationFrame(bucle);
+      }
+
+      // Para revisar un cuadro suelto: index.html?t=15 muestra el segundo 15
+      const cuadroFijo = new URLSearchParams(location.search).get('t');
+      document.fonts.load('100px "Bebas Neue"').then(() => document.fonts.load('600 40px "Barlow"')).finally(() => {
+        if (cuadroFijo !== null) {
+          dibujar(parseFloat(cuadroFijo));
+          document.getElementById('controles').style.display = 'none';
+        } else {
+          dibujar(41.5); // la "portada" antes de dar play
+          requestAnimationFrame(() => {
+            dibujar(41.5);
+            bucle();
+          });
+        }
+      });
+    </script>
+  </body>
+</html>
