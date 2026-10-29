@@ -1,4 +1,4 @@
-// Cielo que pasa del atardecer a la noche mientras dura el festival.
+// Cielo que pasa del atardecer a la noche siguiendo la hora del festival (de 18:00 a 21:00).
 // Cambian de a poco los colores del cielo (y de la niebla), las luces generales y
 // la altura del sol, que se esconde detrás del horizonte. Al oscurecer aparecen las estrellas.
 //
@@ -11,9 +11,11 @@ import * as THREE from 'three';
 // Constantes para ajustar
 // ---------------------------------------------------------------------------
 
-const DURACION = 180; // segundos de juego (sin contar las pausas) hasta que es de noche cerrada
+// El cielo sigue la hora del reloj del festival (ver grilla.js), en minutos desde la medianoche.
+const HORA_ATARDECER = 18 * 60; // 18:00, cuando empiezan las primeras bandas
+const HORA_NOCHE = 21 * 60; // 21:00, noche cerrada: arrancan las bandas de la noche
 
-// Momentos del cielo, en orden. t va de 0 (arranque) a 1 (noche cerrada).
+// Momentos del cielo, en orden. t va de 0 (atardecer) a 1 (noche cerrada).
 // Entre un momento y el siguiente, los colores y las intensidades se mezclan de a poco.
 // arriba / medio / horizonte: los tres colores del degradé del cielo.
 const MOMENTOS = [
@@ -83,7 +85,7 @@ function mezclar(a, b, t) {
  * @param {THREE.Scene} opciones.escena  Le agregamos el cielo, y su niebla cambia de color
  * @param {THREE.HemisphereLight} opciones.luzGeneral
  * @param {THREE.DirectionalLight} opciones.luzDirecta  El sol, que de noche pasa a ser la luna
- * @returns {{ actualizar: (delta: number) => void }}
+ * @returns {{ actualizar: (minutos: number) => void }}
  */
 export function crearCielo({ escena, luzGeneral, luzDirecta }) {
   // --- Fondo: un degradé dibujado en un <canvas> ---
@@ -211,15 +213,14 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
   const colorA = new THREE.Color();
   const colorB = new THREE.Color();
 
-  let tiempo = 0; // segundos de juego
-
   /**
-   * Avanza el atardecer. Se llama en cada cuadro, salvo en pausa (ver main.js).
-   * @param {number} delta  Segundos que pasaron desde el cuadro anterior
+   * Pone el cielo que corresponde a una hora. Se llama en cada cuadro, salvo en pausa (ver main.js).
+   * @param {number} minutos  La hora del festival, en minutos desde la medianoche
    */
-  function actualizar(delta) {
-    tiempo += delta;
-    const t = Math.min(1, tiempo / DURACION); // de 0 a 1, y ahí se queda
+  function actualizar(minutos) {
+    // t: qué parte del camino entre el atardecer y la noche ya pasó. Antes de las 18:00
+    // da menos de 0 y después de las 21:00 más de 1: con min y max lo dejamos entre 0 y 1.
+    const t = Math.min(1, Math.max(0, (minutos - HORA_ATARDECER) / (HORA_NOCHE - HORA_ATARDECER)));
 
     // Buscamos entre qué dos momentos estamos...
     let i = 0;
@@ -259,7 +260,8 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
   }
 
   // Lo llamamos una vez para que el cielo ya arranque con los colores del atardecer.
-  actualizar(0);
+  // (main.js lo vuelve a llamar enseguida con la hora del reloj.)
+  actualizar(HORA_ATARDECER);
 
   return { actualizar };
 }

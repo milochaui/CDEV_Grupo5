@@ -122,6 +122,25 @@ function acercar(valor, objetivo, paso) {
 }
 
 /**
+ * Devuelve el escenario en cuyo público está metido el jugador (si hay suficiente gente
+ * alrededor), o null si no está entre el público de ninguno.
+ * La usan el pogo (acá abajo) y la chica que pide subirse a los hombros (ver chica.js).
+ *
+ * @param {Array<THREE.Group>} escenarios  Los escenarios (con su público en userData)
+ * @param {THREE.Vector3} posicion  Dónde está el jugador en el predio
+ * @returns {THREE.Group | null}
+ */
+export function escenarioEntreElPublico(escenarios, posicion) {
+  for (const escenario of escenarios) {
+    const cantidad = escenario.userData.publico.contarPersonasCerca(posicion, RADIO_ENTRE_PUBLICO);
+    if (cantidad >= PERSONAS_PARA_POGO) {
+      return escenario;
+    }
+  }
+  return null;
+}
+
+/**
  * Crea las acciones del jugador.
  *
  * @param {object} opciones
@@ -218,13 +237,7 @@ export function crearAcciones({ camara, jugador, escenarios }) {
 
   // true si hay suficiente gente alrededor del jugador en alguno de los escenarios.
   function estaEntreElPublico() {
-    for (const escenario of escenarios) {
-      const cantidad = escenario.userData.publico.contarPersonasCerca(camara.position, RADIO_ENTRE_PUBLICO);
-      if (cantidad >= PERSONAS_PARA_POGO) {
-        return true;
-      }
-    }
-    return false;
+    return escenarioEntreElPublico(escenarios, camara.position) !== null;
   }
 
   // Muestra u oculta un cartelito, y le pone el texto. Solo toca la página si algo cambió.

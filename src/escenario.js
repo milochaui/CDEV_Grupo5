@@ -1,7 +1,9 @@
 // Construcción de un escenario de festival con formas simples (estilo low-poly).
 // La función crearEscenario(config) se puede usar varias veces para armar
-// distintos escenarios, cada uno con su banda, su color y su posición.
+// distintos escenarios, cada uno con su color, su posición y su programación
+// (las bandas que tocan ahí durante el festival, una después de la otra).
 import * as THREE from 'three';
+import { aMinutos } from './grilla.js';
 import { crearMusica } from './musica.js';
 import { crearPublico } from './publico.js';
 import { crearBanda } from './artistas.js';
@@ -33,26 +35,35 @@ const ALTO_TRAPO = 1;
  * el grupo entero para que mire hacia el punto "mirarHacia".
  *
  * @param {object} config
- * @param {string} config.nombre    Nombre de la banda (se muestra en el cartel)
+ * @param {string} config.nombre    Nombre del escenario (por ejemplo 'Escenario Rojo')
  * @param {number} config.color     Color principal en hexadecimal, por ejemplo 0xff3355
  * @param {{x: number, z: number}} config.posicion  Lugar del predio donde va el escenario
  * @param {{x: number, z: number}} config.mirarHacia  Punto del predio hacia donde mira el frente
- * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} config.temas
- *        Temas que toca la banda, en orden (archivo = nombre del mp3 en public/audio)
  * @param {THREE.AudioListener} config.oyente  Los "oídos" del jugador
- * @param {string} config.banda  Qué artistas tocan arriba: 'ciro', 'pastillas' o 'calamaro'
- * @param {string[]} config.trapos  Lo que dicen los trapos colgados en la valla
+ * @param {Array<object>} config.lineup  Las bandas que tocan, en orden. Cada una con:
+ *   - banda: qué artistas suben (la clave de crearBanda en artistas.js, por ejemplo 'guasones')
+ *   - nombre: el nombre de la banda (se muestra en el cartel y en la grilla)
+ *   - inicio, fin: el horario de la grilla, como texto "HH:MM"
+ *   - temas: los temas que toca, en orden: [{ archivo, titulo, conocido }]
+ *     (archivo = nombre del mp3 en public/audio)
+ *   - trapos: lo que dicen los trapos que cuelgan sus fans en la valla
+ *   - banderas (opcional): qué banderas ondea el público (ver DISENOS_BANDERA en publico.js)
+ *   - fuegos (opcional): false para que no haya fuegos artificiales en su show
  *
  * Además, en escenario.userData deja:
- *  - nombre: el nombre de la banda.
- *  - color: el color de la banda (el mismo de config.color).
+ *  - nombreEscenario: el nombre del escenario (config.nombre).
+ *  - nombre: el nombre de la banda que está tocando o, entre una y otra, de la que sigue.
+ *  - color: el color del escenario (el mismo de config.color).
  *  - colisiones: la lista de zonas sólidas (tarima, torres de parlantes y valla)
  *    que el jugador no puede atravesar. Cada caja guarda también el centro
  *    y el ángulo de giro de su escenario (ver jugador.js).
  *  - musica: la música del escenario. Por ejemplo, musica.temaActual().conocido
  *    dice si el tema que suena ahora es conocido.
  *  - publico: la gente frente al escenario. publico.actualizar(delta) la anima.
- *  - banda: los artistas arriba de la tarima. banda.actualizar(delta) los anima.
+ *  - banda: los artistas de la banda que toca (o de la última que tocó).
+ *    banda.actualizar(delta) los anima.
+ *  - programacion: qué banda toca y cuándo (ver crearProgramacion, más abajo).
+ *    programacion.actualizar(minutos) la hace subir cuando le toca.
  *  - luces: el show de luces. luces.actualizar(delta) lo mueve con la música.
  *  - pantalla: la pantalla en vivo. pantalla.filmar(...) muestra a la banda y
  *    pantalla.ponerColor(...) la pinta del color de la banda (ver pantalla.js).
@@ -63,8 +74,9 @@ export function crearEscenario(config) {
   const escenario = new THREE.Group();
 
   // userData es un objeto libre que Three.js nos deja usar para guardar datos propios.
-  // Guardamos el nombre y el color de la banda (los usa el indicador del tema que suena).
-  escenario.userData.nombre = config.nombre;
+  // Guardamos el nombre y el color del escenario (los usan la grilla y el indicador del
+  // tema que suena). El nombre de la banda lo va poniendo la programación.
+  escenario.userData.nombreEscenario = config.nombre;
   escenario.userData.color = config.color;
   // Acá vamos juntando las cajas de colisión a medida que creamos las partes.
   escenario.userData.colisiones = [];
@@ -85,12 +97,13 @@ export function crearEscenario(config) {
   crearTorresDeParlantes(escenario, materiales);
   const reflectores = crearReflectores(escenario, materiales, config.color);
   const luces = crearLuces(escenario, config.color);
-  crearCartel(escenario, config.nombre, config.color);
-  crearValla(escenario, materiales, config.trapos);
+  const escribirCartel = crearCartel(escenario, config.color);
+  crearValla(escenario, materiales);
 
   // Música: el sonido sale del frente del escenario, a la altura de los parlantes.
   // Como es parte del grupo, se mueve junto con el escenario.
-  const musica = crearMusica(config.oyente, config.temas);
+  // Arranca en silencio: cada banda toca su set cuando le toca (ver crearProgramacion).
+  const musica = crearMusica(config.oyente);
   musica.sonido.position.set(0, 4, PROFUNDIDAD / 2);
   escenario.add(musica.sonido);
   escenario.userData.musica = musica;
@@ -108,11 +121,26 @@ export function crearEscenario(config) {
   escenario.add(publico.grupo);
   escenario.userData.publico = publico;
 
-  // Artistas: la banda arriba de la tarima. Aparece cuando empieza la música.
-  const banda = crearBanda(config.banda, musica);
-  banda.grupo.position.y = ALTO_TARIMA;
-  escenario.add(banda.grupo);
-  escenario.userData.banda = banda;
+  // Artistas y trapos: armamos una banda por cada show de la programación, cada una con
+  // los trapos de sus fans. Todo arranca escondido: la programación muestra lo que toca.
+  const shows = config.lineup.map((datos) => {
+    const banda = crearBanda(datos.banda, musica);
+    banda.grupo.position.y = ALTO_TARIMA;
+    banda.grupo.visible = false;
+    escenario.add(banda.grupo);
+
+    const trapos = crearTrapos(datos.trapos);
+    trapos.visible = false;
+    escenario.add(trapos);
+
+    return { datos, banda, trapos };
+  });
+  // Hasta que toque alguien, "la banda" del escenario es la primera (todavía escondida).
+  escenario.userData.banda = shows[0].banda;
+
+  // La programación: decide qué banda sube y cuándo.
+  const programacion = crearProgramacion({ escenario, shows, musica, publico, escribirCartel });
+  escenario.userData.programacion = programacion;
 
   // Show de luces: los reflectores, las luces y la pantalla se mueven con la música.
   escenario.userData.luces = crearShowDeLuces(
@@ -135,10 +163,11 @@ export function crearEscenario(config) {
   escenario.userData.fuegos = fuegos;
 
   // Al terminar cada tema el público aplaude (más fuerte si es conocido)
-  // y, si era un tema conocido, salen los fuegos artificiales.
+  // y, si era un tema conocido, salen los fuegos artificiales (salvo en los shows
+  // que no llevan, ver hayFuegos en crearProgramacion).
   musica.alTerminarTema((tema) => {
     aplausos.aplaudir(tema.conocido ? 1 : 0.5);
-    if (tema.conocido) {
+    if (tema.conocido && programacion.hayFuegos()) {
       fuegos.lanzar();
     }
   });
@@ -380,27 +409,15 @@ function crearLuces(escenario, color) {
 
 // Cartel con el nombre de la banda, arriba del travesaño de adelante.
 // Dibujamos el texto en un <canvas> 2D (como en una hoja) y lo usamos como textura.
-function crearCartel(escenario, nombre, color) {
+// Devuelve la función escribir(nombre, subtitulo), que lo vuelve a dibujar: la usa la
+// programación cada vez que cambia la banda.
+function crearCartel(escenario, color) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
 
   const colorCss = new THREE.Color(color).getStyle(); // por ejemplo "rgb(255,51,85)"
-
-  // Fondo oscuro con un borde del color de la banda
-  ctx.fillStyle = '#111111';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = colorCss;
-  ctx.lineWidth = 16;
-  ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
-
-  // Texto centrado
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 110px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(nombre, canvas.width / 2, canvas.height / 2, canvas.width - 80);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace; // para que los colores se vean correctos
@@ -413,11 +430,48 @@ function crearCartel(escenario, nombre, color) {
   );
   cartel.position.set(0, ALTO_ESTRUCTURA + GROSOR_VIGA / 2 + altoCartel / 2, PROFUNDIDAD / 2);
   escenario.add(cartel);
+
+  /**
+   * Dibuja el cartel. Con subtítulo (por ejemplo "A CONTINUACIÓN · 19:30") el nombre
+   * va un poco más arriba y el subtítulo abajo, más chico y del color del escenario.
+   * @param {string} nombre
+   * @param {string} [subtitulo]
+   */
+  function escribir(nombre, subtitulo) {
+    // Fondo oscuro con un borde del color de la banda
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = colorCss;
+    ctx.lineWidth = 16;
+    ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+
+    // Texto centrado. El último número de fillText es el ancho máximo:
+    // si el nombre es largo, el navegador lo angosta para que entre.
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const anchoMaximo = canvas.width - 80;
+    ctx.fillStyle = '#ffffff';
+    if (subtitulo) {
+      ctx.font = 'bold 96px Arial';
+      ctx.fillText(nombre, canvas.width / 2, 105, anchoMaximo);
+      ctx.fillStyle = colorCss;
+      ctx.font = 'bold 44px Arial';
+      ctx.fillText(subtitulo, canvas.width / 2, 195, anchoMaximo);
+    } else {
+      ctx.font = 'bold 110px Arial';
+      ctx.fillText(nombre, canvas.width / 2, canvas.height / 2, anchoMaximo);
+    }
+
+    // Avisamos que el canvas cambió, para que se vuelva a mandar a la placa de video.
+    textura.needsUpdate = true;
+  }
+  return escribir;
 }
 
-// Valla entre el escenario y el público, con los trapos de la gente colgados.
+// Valla entre el escenario y el público. Los trapos de la gente se cuelgan aparte
+// (ver crearTrapos), porque cambian con cada banda.
 // Entre la valla y la tarima queda el "foso", que no se puede pisar.
-function crearValla(escenario, materiales, trapos) {
+function crearValla(escenario, materiales) {
   const z = PROFUNDIDAD / 2 + DISTANCIA_VALLA;
 
   // Dos barandas largas (arriba y abajo) y postes cada 2 metros.
@@ -436,8 +490,14 @@ function crearValla(escenario, materiales, trapos) {
   // La valla y el foso son una sola zona sólida: desde el frente de la tarima hasta la valla.
   const profundidadFoso = DISTANCIA_VALLA + 0.1;
   agregarColision(escenario, 0, PROFUNDIDAD / 2 + profundidadFoso / 2, ANCHO_VALLA, profundidadFoso);
+}
 
-  // Trapos repartidos a lo largo de la valla, colgados de la baranda de arriba.
+// Los trapos de los fans de una banda, repartidos a lo largo de la valla y colgados
+// de la baranda de arriba. Devuelve un grupo con todos: así la programación los
+// muestra o los esconde juntos.
+function crearTrapos(trapos) {
+  const grupo = new THREE.Group();
+  const z = PROFUNDIDAD / 2 + DISTANCIA_VALLA;
   const separacion = ANCHO_VALLA / trapos.length;
   trapos.forEach((texto, i) => {
     const material = crearMaterialTrapo(texto, DISENOS_TRAPO[i % DISENOS_TRAPO.length]);
@@ -449,12 +509,13 @@ function crearValla(escenario, materiales, trapos) {
     // espalda, así se lee bien desde el público y desde el escenario.
     const deFrente = new THREE.Mesh(geometria, material); // mira al público (+Z)
     deFrente.position.set(x, y, z + 0.06);
-    escenario.add(deFrente);
+    grupo.add(deFrente);
     const deEspaldas = new THREE.Mesh(geometria, material);
     deEspaldas.rotation.y = Math.PI; // mira al escenario (−Z)
     deEspaldas.position.set(x, y, z - 0.06);
-    escenario.add(deEspaldas);
+    grupo.add(deEspaldas);
   });
+  return grupo;
 }
 
 // Colores de los trapos: [franjas de afuera, franja del medio]
@@ -505,4 +566,124 @@ function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
     emissiveIntensity: 0.35,
     roughness: 1,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Programación: qué banda toca y cuándo
+// ---------------------------------------------------------------------------
+
+/**
+ * La programación de un escenario. Funciona como en un festival de verdad:
+ *  - Cuando llega la hora de una banda (y el escenario está libre), sube y toca su set.
+ *  - Cuando termina su último tema, se baja. El cartel anuncia a la que sigue
+ *    y sus fans ya cuelgan los trapos.
+ *  - Si una banda se atrasa (sus temas duran más que su horario), la siguiente espera.
+ *  - La última de la noche repite su lista de temas sin parar.
+ *
+ * @param {object} opciones
+ * @param {THREE.Group} opciones.escenario
+ * @param {Array<{datos, banda, trapos}>} opciones.shows  Cada show con su banda y sus trapos ya armados
+ * @param {object} opciones.musica  La música del escenario (ver musica.js)
+ * @param {object} opciones.publico  El público (para cambiarle las banderas)
+ * @param {Function} opciones.escribirCartel  La función que devuelve crearCartel
+ * @returns {{ actualizar: (minutos: number) => void, estadoDe: (numero: number) => string,
+ *             hayFuegos: () => boolean, lineup: Array<object> }}
+ */
+function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }) {
+  let actual = -1; // número del show que está tocando o del último que tocó (-1: todavía ninguno)
+  let enVivo = false; // true mientras la banda "actual" está arriba del escenario
+
+  // Entre una banda y otra: el cartel anuncia a la que sigue y aparecen sus trapos.
+  function anunciarProxima() {
+    const proxima = shows[actual + 1];
+    if (proxima === undefined) {
+      return; // no hay más bandas
+    }
+    escenario.userData.nombre = proxima.datos.nombre;
+    escribirCartel(proxima.datos.nombre, 'A CONTINUACIÓN · ' + proxima.datos.inicio);
+    proxima.trapos.visible = true;
+  }
+
+  // Sube la banda número "numero" y empieza su set.
+  function empezar(numero) {
+    // Si salteamos alguna banda (ver actualizar), escondemos sus trapos.
+    for (let i = actual + 1; i < numero; i++) {
+      shows[i].trapos.visible = false;
+    }
+    actual = numero;
+    enVivo = true;
+
+    const show = shows[numero];
+    show.banda.grupo.visible = true;
+    show.trapos.visible = true;
+    escenario.userData.banda = show.banda;
+    escenario.userData.nombre = show.datos.nombre;
+    escribirCartel(show.datos.nombre);
+    publico.cambiarBanderas(show.datos.banderas);
+
+    // La última banda de la noche repite su lista sin parar.
+    const esLaUltima = numero === shows.length - 1;
+    musica.tocarSet(show.datos.temas, esLaUltima);
+  }
+
+  // La banda terminó su set: se baja y se descuelgan sus trapos.
+  function terminar() {
+    enVivo = false;
+    shows[actual].banda.grupo.visible = false;
+    shows[actual].trapos.visible = false;
+    anunciarProxima();
+  }
+
+  /**
+   * Revisa si una banda terminó o si le toca subir a otra. Se llama en cada cuadro,
+   * salvo en pausa (ver main.js).
+   * @param {number} minutos  La hora del festival (ver grilla.js)
+   */
+  function actualizar(minutos) {
+    if (enVivo) {
+      if (musica.hayShow()) {
+        return; // la banda sigue tocando
+      }
+      terminar();
+    }
+    // El escenario está libre: ¿ya llegó la hora de alguna de las que siguen?
+    // Buscamos la última cuya hora ya llegó. Normalmente es la próxima, pero si el reloj
+    // arranca más tarde (ver HORA_INICIO en grilla.js) así salteamos las que ya pasaron.
+    let siguiente = -1;
+    for (let i = actual + 1; i < shows.length; i++) {
+      if (minutos >= aMinutos(shows[i].datos.inicio)) {
+        siguiente = i;
+      }
+    }
+    if (siguiente !== -1) {
+      empezar(siguiente);
+    }
+  }
+
+  // Para la grilla: 'ahora' si ese show está tocando, 'ya-toco' si ya pasó y '' si todavía no.
+  function estadoDe(numero) {
+    if (numero === actual && enVivo) {
+      return 'ahora';
+    }
+    if (numero <= actual) {
+      return 'ya-toco';
+    }
+    return '';
+  }
+
+  // true si en el show de ahora hay fuegos artificiales (todos, salvo los que tienen fuegos: false).
+  function hayFuegos() {
+    return actual >= 0 && shows[actual].datos.fuegos !== false;
+  }
+
+  // Al principio, el cartel ya anuncia a la primera banda.
+  anunciarProxima();
+
+  return {
+    actualizar,
+    estadoDe,
+    hayFuegos,
+    // Los datos de cada show (nombre, inicio, fin...), para armar la grilla.
+    lineup: shows.map((show) => show.datos),
+  };
 }

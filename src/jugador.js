@@ -21,8 +21,11 @@ const RADIO_JUGADOR = 0.4;
  * @param {Array} opciones.colisiones  Cajas {minX, maxX, minZ, maxZ, centroX, centroZ, angulo}
  *        que no se pueden atravesar (las arma escenario.js)
  * @param {number} opciones.limitePredio  Distancia máxima al centro del predio (en X y en Z)
+ * @param {{ancho: number, largo: number}} opciones.entrada  El pasillo de la entrada, del lado
+ *        de afuera de la valla del frente (+Z): ahí también se puede caminar (ver vallas.js)
  * @returns {{ controles: PointerLockControls, actualizar: (delta: number) => void,
- *             desplazar: (dx: number, dz: number) => void }}
+ *             desplazar: (dx: number, dz: number) => void,
+ *             acotarAlPredio: (posicion: THREE.Vector3, anteriorZ: number) => void }}
  */
 export function crearJugador(camara, elemento, opciones) {
   // PointerLockControls (viene con Three.js) se encarga de:
@@ -82,6 +85,33 @@ export function crearJugador(camara, elemento, opciones) {
   }
 
   /**
+   * Si una posición quedó afuera del predio, la deja justo en el borde.
+   * La usa desplazar (acá abajo) y también la cámara de tercera persona (ver terceraPersona.js).
+   * @param {THREE.Vector3} posicion  La posición a corregir (la cambia)
+   * @param {number} anteriorZ  Dónde estaba antes en Z (para saber si viene del pasillo de la entrada)
+   */
+  function acotarAlPredio(posicion, anteriorZ) {
+    // Si se pasa del borde, lo dejamos justo en el borde.
+    // Adelante (+Z) el borde está más lejos: hasta el fondo del pasillo de la entrada.
+    const limite = opciones.limitePredio - RADIO_JUGADOR;
+    const limiteAdelante = opciones.limitePredio + opciones.entrada.largo - RADIO_JUGADOR;
+    posicion.x = Math.min(Math.max(posicion.x, -limite), limite);
+    posicion.z = Math.min(Math.max(posicion.z, -limite), limiteAdelante);
+
+    // Pasando la línea de la valla del frente, solo se puede estar dentro del pasillo.
+    const mitadPasillo = opciones.entrada.ancho / 2 - RADIO_JUGADOR;
+    if (posicion.z > limite && Math.abs(posicion.x) > mitadPasillo) {
+      if (anteriorZ > limite) {
+        // Ya estaba en el pasillo: choca con las vallas de los costados.
+        posicion.x = Math.min(Math.max(posicion.x, -mitadPasillo), mitadPasillo);
+      } else {
+        // Venía de adentro del predio, al lado de la puerta: choca con la valla del frente.
+        posicion.z = limite;
+      }
+    }
+  }
+
+  /**
    * Mueve al jugador (dx, dz) metros en el predio, sin dejarlo salir del borde
    * ni atravesar obstáculos. La usa la caminata y también los empujones del pogo.
    * @param {number} dx  Metros a moverse en X
@@ -97,10 +127,7 @@ export function crearJugador(camara, elemento, opciones) {
     posicion.z += dz;
 
     // --- Límites del predio ---
-    // Si se pasa del borde, lo dejamos justo en el borde.
-    const limite = opciones.limitePredio - RADIO_JUGADOR;
-    posicion.x = Math.min(Math.max(posicion.x, -limite), limite);
-    posicion.z = Math.min(Math.max(posicion.z, -limite), limite);
+    acotarAlPredio(posicion, anteriorZ);
 
     // --- Colisiones ---
     // Revisamos cada eje por separado: si al moverse en X choca, deshacemos solo X.
@@ -166,5 +193,5 @@ export function crearJugador(camara, elemento, opciones) {
     // La altura de los ojos (y el salto) la maneja acciones.js.
   }
 
-  return { controles, actualizar, desplazar };
+  return { controles, actualizar, desplazar, acotarAlPredio };
 }

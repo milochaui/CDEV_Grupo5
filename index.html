@@ -20,9 +20,9 @@
         --vidrio: rgba(12, 8, 30, 0.55); /* fondo de los carteles: oscuro y semitransparente */
         --borde: rgba(255, 255, 255, 0.14);
         --texto-suave: rgba(255, 255, 255, 0.7);
-        --rojo: #ff3355; /* Ciro y los Persas */
-        --ambar: #ff9900; /* Las Pastillas del Abuelo */
-        --celeste: #33aaff; /* Andrés Calamaro */
+        --rojo: #ff3355; /* Escenario Rojo (cierra Ciro y los Persas) */
+        --ambar: #ff9900; /* Escenario Ámbar (cierran Las Pastillas del Abuelo) */
+        --celeste: #33aaff; /* Escenario Celeste (cierra Andrés Calamaro) */
         --dorado: #ffcc33;
         --fuente-titulo: 'Bebas Neue', Impact, Arial, sans-serif;
         --fuente-texto: 'Barlow', Arial, sans-serif;
@@ -74,6 +74,7 @@
         font-family: var(--fuente-texto);
         text-align: center;
         cursor: pointer;
+        z-index: 10; /* por encima de los demás cartelitos: en pausa los tapa a todos */
       }
       .volanta {
         font-size: 14px;
@@ -109,6 +110,14 @@
       .lineup .estrella {
         color: var(--texto-suave);
         margin: 0;
+      }
+      /* Las bandas de la tarde: abajo de las de la noche, más chicas (como en un afiche) */
+      .lineup-tarde {
+        margin: -18px 0 28px;
+        font-family: var(--fuente-titulo);
+        font-size: clamp(15px, 2vw, 20px);
+        letter-spacing: 2px;
+        color: var(--texto-suave);
       }
       /* Controles en dos columnas */
       .controles {
@@ -269,6 +278,110 @@
         from { transform: scale(1); }
         to { transform: scale(1.2); }
       }
+
+      /* Reloj del festival: arriba a la izquierda (el resto del estilo viene de .cartel) */
+      #reloj {
+        display: none; /* se muestra recién cuando empieza el juego */
+        top: 16px;
+        left: 16px;
+        font-family: var(--fuente-titulo);
+        font-size: 24px;
+        letter-spacing: 2px;
+      }
+
+      /* Grilla de horarios: un cartel en el medio de la pantalla (se abre con G) */
+      #grilla {
+        display: none; /* cerrada al empezar */
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%); /* centra el cartel sobre su propio medio */
+        width: min(900px, 92vw); /* 900 px, o menos si la ventana es angosta */
+        padding: 20px 24px;
+        /* Como los carteles del juego (.cartel), pero más oscuro para que se lea bien */
+        background: rgba(12, 8, 30, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid var(--borde);
+        border-radius: 16px;
+        color: #fff;
+        font-family: var(--fuente-texto);
+        pointer-events: none;
+      }
+      #grilla h2 {
+        margin: 0 0 16px;
+        text-align: center;
+        font-family: var(--fuente-titulo);
+        font-weight: normal;
+        font-size: 34px;
+        letter-spacing: 2px;
+      }
+      #grilla-columnas {
+        display: flex; /* las tres columnas una al lado de la otra */
+        gap: 16px;
+      }
+      .grilla-columna {
+        flex: 1; /* las tres del mismo ancho */
+        border-top: 4px solid; /* el color lo pone grilla.js */
+        padding-top: 8px;
+      }
+      .grilla-columna h3 {
+        margin: 0 0 10px;
+        font-family: var(--fuente-titulo);
+        font-weight: normal;
+        font-size: 22px;
+        letter-spacing: 1px;
+      }
+      .grilla-show {
+        margin-bottom: 8px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+      }
+      .grilla-horario {
+        display: block;
+        font-size: 13px;
+        color: var(--texto-suave);
+      }
+      .grilla-banda {
+        display: block;
+        font-size: 17px;
+        font-weight: bold;
+      }
+      /* Las que ya tocaron, apagadas */
+      .grilla-show.ya-toco {
+        opacity: 0.4;
+      }
+      /* La que está tocando ahora, resaltada y con el cartelito "AHORA" */
+      .grilla-show.ahora {
+        background: rgba(255, 255, 255, 0.22);
+        outline: 2px solid #fff;
+      }
+      .grilla-show.ahora .grilla-banda::after {
+        content: '  ● AHORA';
+        font-size: 12px;
+        color: var(--rojo);
+      }
+      #grilla .ayuda {
+        margin: 14px 0 0;
+        text-align: center;
+        font-size: 13px;
+        color: var(--texto-suave);
+      }
+
+      /* Diálogo de la chica que pide subirse a los hombros: abajo al centro */
+      /* (el resto del estilo viene de .cartel) */
+      #dialogo-chica {
+        display: none; /* se muestra solo durante el pedido */
+        bottom: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 10px 20px;
+        border-radius: 16px; /* menos redondeado que .cartel: puede tener dos renglones */
+        font-size: 18px;
+        text-align: center;
+        white-space: pre; /* respeta los saltos de línea del texto */
+      }
     </style>
   </head>
   <body>
@@ -280,6 +393,9 @@
         <span style="color: var(--rojo)">Ciro y los Persas</span><span class="estrella">★</span
         ><span style="color: var(--ambar)">Las Pastillas del Abuelo</span><span class="estrella">★</span
         ><span style="color: var(--celeste)">Andrés Calamaro</span>
+      </p>
+      <p class="lineup-tarde">
+        Guasones · Callejeros · Turf · Intoxicados · No Te Va Gustar · La Vela Puerca
       </p>
       <div class="controles">
         <div><kbd>Mouse</kbd> mirar alrededor</div>
@@ -293,6 +409,9 @@
         <div><kbd>Esc</kbd><kbd>P</kbd> pausa</div>
         <div><kbd>Clic</kbd> tomar o comer</div>
         <div><kbd>M</kbd> silenciar el sonido</div>
+        <div><kbd>G</kbd> grilla de horarios</div>
+        <div><kbd>V</kbd> vista en tercera persona</div>
+        <div><kbd>1</kbd><kbd>2</kbd> responder sí / no</div>
         <div>Dejá todo cerca de un escenario: llená el <b>aguante</b></div>
       </div>
       <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
@@ -319,6 +438,17 @@
       <div id="aguante-texto">Aguante</div>
       <div id="aguante-barra"><div id="aguante-relleno"></div></div>
     </div>
+
+    <!-- Reloj del festival y grilla de horarios (los completa grilla.js) -->
+    <div id="reloj" class="cartel"></div>
+    <div id="grilla">
+      <h2>Grilla del festival — <span id="grilla-hora"></span></h2>
+      <div id="grilla-columnas"></div>
+      <p class="ayuda">G para cerrar</p>
+    </div>
+
+    <!-- Diálogo de la chica que pide subirse a los hombros (lo completa chica.js) -->
+    <div id="dialogo-chica" class="cartel"></div>
 
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>

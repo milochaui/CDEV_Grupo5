@@ -1,4 +1,5 @@
-// Música de un escenario: un "parlante" 3D que reproduce una lista de temas en orden.
+// Música de un escenario: un "parlante" 3D que reproduce el set de la banda que toca
+// (su lista de temas, en orden).
 // El volumen baja con la distancia y el sonido se ubica en el espacio (izquierda/derecha)
 // según hacia dónde mira el jugador.
 import * as THREE from 'three';
@@ -7,21 +8,29 @@ import * as THREE from 'three';
 // 1. Hasta DISTANCIA_VOLUMEN_COMPLETO: suena al 100 %.
 // 2. Entre DISTANCIA_VOLUMEN_COMPLETO y DISTANCIA_SILENCIO: baja siguiendo una curva.
 // 3. Más allá de DISTANCIA_SILENCIO: silencio total.
-// Con estos valores: a 20 m = 100 %, a 40 m ≈ 93 %, a 60 m ≈ 73 %, a 80 m ≈ 39 %,
-// a 92 m ≈ 12 % y desde 97 m = 0 %.
+// Con estos valores: a 20 m = 100 %, a 40 m ≈ 88 %, a 60 m ≈ 52 %, a 74 m ≈ 13 %
+// y desde 78 m = 0 %.
 // Pensados para los tres escenarios en triángulo (ver main.js):
-//  - frente a un escenario (a 20 m de su parlante) esa banda suena al 100 % y las otras
-//    dos están a más de 140 m: no se escuchan.
-//  - en el centro del predio los tres parlantes están a unos 92 m: las tres bandas
-//    suenan al 12 %, bajito, de fondo.
+//  - metido en el público de un escenario esa banda suena fuerte y los parlantes de las
+//    otras dos están a más de 95 m: no se escuchan.
+//  - en el centro del predio los tres parlantes están a unos 74 m: las tres bandas
+//    suenan al 13 %, bajito, de fondo.
 const DISTANCIA_VOLUMEN_COMPLETO = 20; // metros
-const DISTANCIA_SILENCIO = 97; // metros
+const DISTANCIA_SILENCIO = 78; // metros
 
 // Vite sirve la carpeta public/audio en la dirección /audio
 const CARPETA_AUDIO = '/audio/';
 
 // Silencio entre un tema y el siguiente: ahí el público aplaude (ver aplausos.js).
 const SEGUNDOS_ENTRE_TEMAS = 6;
+
+// Si falta el mp3 de un tema, la banda se queda este tiempo en el escenario (en silencio)
+// antes de pasar al siguiente: más o menos lo que dura un tema. Así, aunque falten
+// audios, cada banda ocupa su lugar en la grilla y no se adelanta la siguiente.
+const SEGUNDOS_SIN_AUDIO = 240;
+
+// Lo que devuelve temaActual() antes de que toque la primera banda.
+const SIN_TEMA = { archivo: null, titulo: '', conocido: false };
 
 /**
  * Calcula el volumen (de 0 a 1) que corresponde a una distancia, en metros.
@@ -48,15 +57,18 @@ function volumenSegunDistancia(distancia) {
 /**
  * Crea la música de un escenario.
  *
+ * Arranca en silencio: suena recién cuando alguien llama a tocarSet().
+ *
  * @param {THREE.AudioListener} oyente  Los "oídos" del jugador (van pegados a la cámara)
- * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} temas  Lista de temas en orden
- * @returns {{ sonido: THREE.PositionalAudio, arrancar: () => void, pausar: () => void,
- *             reanudar: () => void, temaActual: () => object,
+ * @returns {{ sonido: THREE.PositionalAudio, tocarSet: (temas, repetir) => void,
+ *             pausar: () => void, reanudar: () => void, temaActual: () => object,
+ *             hayShow: () => boolean, faltaAudio: () => boolean,
  *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number,
  *             estaSonando: () => boolean, graves: () => number,
- *             alTerminarTema: (funcion: (tema) => void) => void }}
+ *             alTerminarTema: (funcion: (tema) => void) => void,
+ *             segundosDelTema: () => number, numeroDeTema: () => number }}
  */
-export function crearMusica(oyente, temas) {
+export function crearMusica(oyente) {
   // PositionalAudio es un sonido con posición en el mundo 3D: se agrega al escenario
   // como cualquier otro objeto. Por defecto usa el modelo 'HRTF', que simula cómo llega
   // el sonido a cada oído, y así se nota de qué lado viene.
@@ -99,51 +111,96 @@ export function crearMusica(oyente, temas) {
   const primeraFranjaGrave = Math.max(1, Math.floor(40 / anchoFranja));
   const ultimaFranjaGrave = Math.ceil(150 / anchoFranja);
 
-  // Posición en la lista del tema que está sonando.
-  let indice = 0;
+  // --- El set que se está tocando ---
+  // Un "set" es la lista de temas que toca una banda en su turno (ver tocarSet).
+  let temas = []; // los temas del set, en orden
+  let indice = 0; // posición en la lista del tema que está sonando
+  let repetir = false; // true: al terminar el último tema vuelve a empezar (la banda de la noche)
+  let enSet = false; // hay una banda tocando su set (también en los silencios entre temas)
+  let sinAudio = false; // no se encontró el mp3 del tema actual
 
   let pausado = false; // el jugador puso pausa
   let entreTemas = false; // terminó un tema y todavía no empezó el siguiente
   let siguienteListo = false; // ya pasó el silencio entre temas
   const avisos = []; // funciones a las que avisamos cuando termina un tema
+  // Cuántos temas empezaron a sonar desde que arrancó la música. A diferencia de "indice",
+  // nunca vuelve a 0: sirve para distinguir una vez que suena un tema de la vez siguiente.
+  let temasEmpezados = 0;
 
   // Carga el tema de la posición "indice" y lo hace sonar.
   function reproducirTemaActual() {
+    sinAudio = false;
     elemento.src = CARPETA_AUDIO + temas[indice].archivo;
-    elemento.play();
+    // play() devuelve una "promesa" que falla si el archivo no existe. Ese caso lo
+    // atendemos en el evento 'error' de más abajo; acá solo evitamos el error en la consola.
+    elemento.play().catch(() => {});
+    temasEmpezados++;
   }
 
-  // Pasa al tema siguiente. El % (resto de la división) hace que después del último
-  // volvamos al primero: con 2 temas, (1 + 1) % 2 = 0.
-  function siguienteTema() {
+  // Después del silencio entre temas: sigue con el próximo tema del set o, si era el
+  // último (y no hay que repetir), el set termina y la banda se baja del escenario.
+  // El % (resto de la división) hace que después del último volvamos al primero:
+  // con 2 temas, (1 + 1) % 2 = 0.
+  function avanzar() {
     entreTemas = false;
     siguienteListo = false;
+    const eraElUltimo = indice === temas.length - 1;
+    if (eraElUltimo && !repetir) {
+      enSet = false;
+      return;
+    }
     indice = (indice + 1) % temas.length;
     reproducirTemaActual();
   }
 
-  // Cuando termina un tema: avisamos (para los aplausos y los fuegos artificiales) y,
-  // después de un silencio, pasamos al siguiente.
-  elemento.addEventListener('ended', () => {
-    for (const aviso of avisos) {
-      aviso(temas[indice]);
-    }
+  // Cuando termina un tema: esperamos un silencio y después avanzamos.
+  // "segundos" es cuánto dura ese silencio.
+  function terminarTema(segundos) {
     entreTemas = true;
     // setTimeout llama a la función después de esa cantidad de milisegundos.
     setTimeout(() => {
       siguienteListo = true;
-      // Si justo está en pausa no arrancamos: lo hace reanudar() al volver.
+      // Si justo está en pausa no avanzamos: lo hace reanudar() al volver.
       if (!pausado) {
-        siguienteTema();
+        avanzar();
       }
-    }, SEGUNDOS_ENTRE_TEMAS * 1000);
+    }, segundos * 1000);
+  }
+
+  // Terminó un tema: avisamos (para los aplausos y los fuegos artificiales) y,
+  // después de un silencio, seguimos.
+  elemento.addEventListener('ended', () => {
+    for (const aviso of avisos) {
+      aviso(temas[indice]);
+    }
+    terminarTema(SEGUNDOS_ENTRE_TEMAS);
   });
 
-  // Empieza la lista desde el primer tema. Se llama con el clic del jugador,
-  // porque los navegadores no dejan reproducir sonido sin una interacción.
-  function arrancar() {
+  // No se encontró el mp3 (todavía no lo copiaron a public/audio): la banda "toca" en
+  // silencio un rato y sigue con el siguiente. Así la programación del festival no se
+  // traba por un archivo que falta. No avisamos: nadie aplaude un tema que no sonó.
+  elemento.addEventListener('error', () => {
+    if (!enSet || entreTemas) {
+      return;
+    }
+    console.warn('Falta el audio public/audio/' + temas[indice].archivo);
+    sinAudio = true;
+    terminarTema(SEGUNDOS_SIN_AUDIO);
+  });
+
+  /**
+   * Empieza el set de una banda: toca la lista de temas en orden.
+   * Lo llama la programación del escenario cuando le toca el turno (ver escenario.js).
+   * @param {Array<{archivo: string, titulo: string, conocido: boolean}>} temasDelSet
+   * @param {boolean} repetirSet  true: la lista se repite sin parar (la banda que cierra la noche)
+   */
+  function tocarSet(temasDelSet, repetirSet) {
+    temas = temasDelSet;
+    repetir = repetirSet;
     indice = 0;
+    enSet = true;
     entreTemas = false;
+    siguienteListo = false;
     reproducirTemaActual();
   }
 
@@ -157,16 +214,19 @@ export function crearMusica(oyente, temas) {
   // (así no lo "reiniciamos" sin querer).
   function reanudar() {
     pausado = false;
+    if (!enSet) {
+      return; // no hay ninguna banda tocando: no hay nada que reanudar
+    }
     if (entreTemas) {
-      // Estábamos en el silencio entre temas: si ya terminó, arranca el siguiente;
-      // si no, lo arranca el setTimeout de arriba cuando se cumpla el tiempo.
+      // Estábamos en el silencio entre temas: si ya terminó, avanzamos;
+      // si no, lo hace el setTimeout de terminarTema cuando se cumpla el tiempo.
       if (siguienteListo) {
-        siguienteTema();
+        avanzar();
       }
       return;
     }
     if (elemento.paused) {
-      elemento.play();
+      elemento.play().catch(() => {});
     }
   }
 
@@ -178,14 +238,37 @@ export function crearMusica(oyente, temas) {
     avisos.push(funcion);
   }
 
-  // Devuelve el tema que está sonando ahora: { archivo, titulo, conocido }
+  // Devuelve el tema que está sonando ahora: { archivo, titulo, conocido }.
+  // Entre un set y otro devuelve el último que sonó (o SIN_TEMA si todavía no tocó nadie),
+  // así quien pregunte "¿es conocido?" siempre tiene una respuesta.
   function temaActual() {
-    return temas[indice];
+    return temas[indice] ?? SIN_TEMA;
   }
 
-  // true si el tema está sonando (antes del primer clic, por ejemplo, no suena).
+  // true si el tema está sonando (antes del primer set, por ejemplo, no suena).
   function estaSonando() {
     return !elemento.paused;
+  }
+
+  // true mientras una banda está tocando su set, incluidos los silencios entre temas.
+  function hayShow() {
+    return enSet;
+  }
+
+  // true si al tema actual le falta el mp3 (ver el evento 'error').
+  function faltaAudio() {
+    return sinAudio;
+  }
+
+  // Segundos que lleva sonando el tema actual (currentTime es en qué segundo va el <audio>).
+  function segundosDelTema() {
+    return elemento.currentTime;
+  }
+
+  // Número de la vez que está sonando: 1 el primer tema, 2 el segundo, y así
+  // (si la lista vuelve a empezar, sigue sumando).
+  function numeroDeTema() {
+    return temasEmpezados;
   }
 
   // Energía de los graves en este momento, de 0 (nada) a 1 (al máximo).
@@ -220,7 +303,8 @@ export function crearMusica(oyente, temas) {
   }
 
   return {
-    sonido, arrancar, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
-    alTerminarTema,
+    sonido, tocarSet, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
+    alTerminarTema, hayShow, faltaAudio,
+    segundosDelTema, numeroDeTema,
   };
 }
