@@ -11,6 +11,8 @@ import { crearJugador } from './jugador.js';
 import { crearAcciones } from './acciones.js';
 import { crearCielo } from './cielo.js';
 import { crearAguanteMetro } from './aguante.js';
+import { crearBorrachera, crearPasadaBorrachera } from './borrachera.js';
+import { crearLimpieza } from './limpieza.js';
 import { crearBarra, crearPedidos } from './barra.js';
 import { crearPiso, crearBanderines } from './predio.js';
 import { crearGrilla } from './grilla.js';
@@ -57,15 +59,17 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// --- Bloom: el resplandor de las luces ---
+// --- Efectos sobre la imagen: el resplandor de las luces y la borrachera ---
 // En vez de dibujar la escena directo en pantalla, la dibujamos en una imagen intermedia
 // y le aplicamos efectos antes de mostrarla. Eso lo hace el EffectComposer, que va
 // pasando la imagen por una cadena de "pasadas":
 //  1. RenderPass: dibuja la escena como siempre.
 //  2. UnrealBloomPass: a lo que brilla mucho (reflectores, pantallas, fuegos, celulares,
 //     el sol) le agrega un halo de luz alrededor, como se ve en las fotos de un recital.
-//  3. OutputPass: corrige los colores para la pantalla (lo que antes hacía el renderer solo).
-// Si anda lento en una compu, se puede apagar con USAR_BLOOM = false.
+//  3. Pasada de la borrachera: si el jugador tomó, deforma la imagen y le cambia los colores
+//     (ver borrachera.js). Sobrio no hace nada.
+//  4. OutputPass: corrige los colores para la pantalla (lo que antes hacía el renderer solo).
+// Si anda lento en una compu, el bloom se puede apagar con USAR_BLOOM = false.
 const USAR_BLOOM = true;
 const BLOOM_FUERZA = 0.7; // cuánto halo agrega
 const BLOOM_RADIO = 0.4; // qué tan desparramado es el halo
@@ -84,9 +88,16 @@ composer.setSize(window.innerWidth, window.innerHeight);
 const pasadaEscena = new RenderPass(escena, camara);
 composer.addPass(pasadaEscena);
 // UnrealBloomPass(tamaño, fuerza, radio, umbral)
-composer.addPass(
-  new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), BLOOM_FUERZA, BLOOM_RADIO, BLOOM_UMBRAL)
+const pasadaBloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  BLOOM_FUERZA,
+  BLOOM_RADIO,
+  BLOOM_UMBRAL
 );
+pasadaBloom.enabled = USAR_BLOOM;
+composer.addPass(pasadaBloom);
+const pasadaBorrachera = crearPasadaBorrachera();
+composer.addPass(pasadaBorrachera);
 composer.addPass(new OutputPass());
 
 // --- Iluminación general ---
@@ -149,6 +160,10 @@ camara.lookAt(0, 6, LIMITE_VALLAS);
 // Las de la tarde tocan dos temas: uno tranqui y uno para el pogo (conocido: true).
 // La banda de la noche (la última) repite su lista sin parar.
 // Los mp3 van en public/audio con estos nombres de archivo (ver el README).
+// booms: los segundos del tema en los que explota. Ahí se arma el pogo (ver ronda.js):
+// unos segundos antes empiezan los rockeros a abrir la ronda, y en el boom saltan todos.
+// Los sacamos midiendo la energía de cada mp3 (dónde sube de golpe). Si un momento no
+// coincide con lo que se escucha, alcanza con cambiar el número.
 const escenarios = [
   crearEscenario({
     nombre: 'Escenario Rojo',
@@ -164,7 +179,7 @@ const escenarios = [
         fin: '19:15',
         temas: [
           { archivo: 'guasones_tranqui_pasanlashoras.mp3', titulo: 'Pasan las horas', conocido: false },
-          { archivo: 'guasones_conocido_reyesdelanoche.mp3', titulo: 'Reyes de la noche', conocido: true },
+          { archivo: 'guasones_conocido_reyesdelanoche.mp3', titulo: 'Reyes de la noche', conocido: true, booms: [7.15, 75.4, 184.1] },
         ],
         trapos: ['GUASONES', 'LA PLATA PRESENTE', 'ROCK STONE', 'BERISSO', 'ENSENADA'], // colgados en la valla
       },
@@ -175,7 +190,7 @@ const escenarios = [
         fin: '20:45',
         temas: [
           { archivo: 'callejeros_tranqui_canciondecuna.mp3', titulo: 'Canción de cuna', conocido: false },
-          { archivo: 'callejeros_conocido_rocanrolessindestino.mp3', titulo: 'Rocanroles sin destino', conocido: true },
+          { archivo: 'callejeros_conocido_rocanrolessindestino.mp3', titulo: 'Rocanroles sin destino', conocido: true, booms: [45.1, 63.45] },
         ],
         trapos: ['CALLEJEROS', 'VILLA CELINA', 'ROCK BARRIAL', 'LA MATANZA', 'CIUDADELA'],
         // Sin fuegos artificiales en el show de Callejeros, por respeto a las víctimas de Cromañón.
@@ -187,7 +202,7 @@ const escenarios = [
         inicio: '21:00',
         fin: '23:00',
         temas: [
-          { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true },
+          { archivo: 'ciro_conocido_astros.mp3', titulo: 'Astros', conocido: true, booms: [2.45, 56.6, 165.7] },
           { archivo: 'ciro_tranqui_alatardecer.mp3', titulo: 'Al atardecer', conocido: false },
         ],
         trapos: ['AGUANTE CIRO', 'LANÚS PRESENTE', 'LOS PERSAS', 'MORÓN', 'LA PLATA'],
@@ -208,7 +223,7 @@ const escenarios = [
         fin: '19:25',
         temas: [
           { archivo: 'turf_tranqui_locounpoco.mp3', titulo: 'Loco un poco', conocido: false },
-          { archivo: 'turf_conocido_pasosalcostado.mp3', titulo: 'Pasos al costado', conocido: true },
+          { archivo: 'turf_conocido_pasosalcostado.mp3', titulo: 'Pasos al costado', conocido: true, booms: [9.3, 142.8] },
         ],
         trapos: ['TURF', 'BELGRANO PRESENTE', 'LEVINTON', 'NÚÑEZ', 'LOCOS UN POCO'],
       },
@@ -219,7 +234,7 @@ const escenarios = [
         fin: '20:55',
         temas: [
           { archivo: 'intoxicados_tranqui_nuncaquise.mp3', titulo: 'Nunca quise', conocido: false },
-          { archivo: 'intoxicados_conocido_quierenrock.mp3', titulo: 'Quieren rock', conocido: true },
+          { archivo: 'intoxicados_conocido_quierenrock.mp3', titulo: 'Quieren rock', conocido: true, booms: [17.45, 54.65, 88.7, 157.4] },
         ],
         trapos: ['INTOXICADOS', 'QUE SEA ROCK', 'EL PITY', 'LUGANO', 'MATADEROS'],
       },
@@ -229,7 +244,7 @@ const escenarios = [
         inicio: '21:10',
         fin: '23:10',
         temas: [
-          { archivo: 'pastillas_conocido_viejokarma.mp3', titulo: 'Viejo Karma', conocido: true },
+          { archivo: 'pastillas_conocido_viejokarma.mp3', titulo: 'Viejo Karma', conocido: true, booms: [6, 234.2] },
           { archivo: 'pastillas_tranqui_mejuegoelcorazon.mp3', titulo: 'Me juego el corazón', conocido: false },
         ],
         trapos: ['AGUANTE LAS PASTILLAS', 'QUILMES PRESENTE', 'EL PITI', 'SAN JUSTO', 'ROSARIO'],
@@ -250,7 +265,7 @@ const escenarios = [
         fin: '19:35',
         temas: [
           { archivo: 'ntvg_tranqui_cielodeunsolocolor.mp3', titulo: 'Cielo de un solo color', conocido: false },
-          { archivo: 'ntvg_conocido_chau.mp3', titulo: 'Chau', conocido: true },
+          { archivo: 'ntvg_conocido_chau.mp3', titulo: 'Chau', conocido: true, booms: [12.35, 194.55] },
         ],
         trapos: ['NO TE VA GUSTAR', 'URUGUAY PRESENTE', 'NTVG', 'MONTEVIDEO', 'EL CERRO'],
         // Las bandas uruguayas: en el público flamean banderas de Uruguay (ver publico.js).
@@ -263,7 +278,7 @@ const escenarios = [
         fin: '21:05',
         temas: [
           { archivo: 'velapuerca_tranqui_misemilla.mp3', titulo: 'Mi semilla', conocido: false },
-          { archivo: 'velapuerca_conocido_zafar.mp3', titulo: 'Zafar', conocido: true },
+          { archivo: 'velapuerca_conocido_zafar.mp3', titulo: 'Zafar', conocido: true, booms: [6.35, 202] },
         ],
         trapos: ['LA VELA PUERCA', 'VAMO ARRIBA', 'MONTEVIDEO', 'LA VELA', 'URUGUAY'],
         banderas: ['uruguay', 'uruguay', 'argentina'],
@@ -274,7 +289,7 @@ const escenarios = [
         inicio: '21:20',
         fin: '23:20',
         temas: [
-          { archivo: 'calamaro_conocido_sindocumentos.mp3', titulo: 'Sin documentos', conocido: true },
+          { archivo: 'calamaro_conocido_sindocumentos.mp3', titulo: 'Sin documentos', conocido: true, booms: [9.9] },
           { archivo: 'calamaro_medio_todaviaunacanciondeamor.mp3', titulo: 'Todavía una canción de amor', conocido: false },
           { archivo: 'calamaro_tranqui_buenasuerteyhastaluego.mp3', titulo: 'Buena suerte y hasta luego', conocido: false },
         ],
@@ -333,14 +348,29 @@ const jugador = crearJugador(camara, document.body, {
   entrada: ENTRADA, // ...salvo por la puerta, hacia el pasillo de la entrada
 });
 
+// --- Borrachera y desmayo ---
+// Cada fernet emborracha un poco más (ver borrachera.js). Si toma muchos se desmaya, y le
+// avisa a estas tres funciones (están más abajo, en "El desmayo y la mañana siguiente").
+const borrachera = crearBorrachera({
+  camara,
+  jugador,
+  oyente,
+  pasada: pasadaBorrachera,
+  bloom: pasadaBloom,
+  escenarioMasFuerte,
+  alCaer,
+  alDormirse,
+  alDespertar,
+});
+
 // --- Acciones del recital (brazos, salto, cantar y pogo) ---
-const acciones = crearAcciones({ camara, jugador, escenarios });
+const acciones = crearAcciones({ camara, jugador, escenarios, borrachera });
 
 // --- Aguante-metro (la barra abajo a la derecha) ---
-const aguante = crearAguanteMetro({ acciones, escenarioMasFuerte });
+const aguante = crearAguanteMetro({ acciones, escenarioMasFuerte, borrachera });
 
 // --- Pedidos en la barra (fernet y choripán en la mano) ---
-const pedidos = crearPedidos({ barra, acciones, jugador, camara });
+const pedidos = crearPedidos({ barra, acciones, jugador, camara, borrachera });
 
 // --- Reloj del festival y grilla de horarios (tecla G) ---
 // El reloj manda: con su hora cada escenario sube a la banda que toca y el cielo oscurece.
@@ -354,6 +384,41 @@ const terceraPersona = crearTerceraPersona({ escena, camara, jugador, acciones }
 // --- La chica que pide subirse a los hombros (con los temas tranquis) ---
 // En tercera persona se sienta en los hombros del cuerpo del jugador.
 const chica = crearChica({ escena, camara, jugador, escenarios, hombros: terceraPersona.hombros });
+
+// --- La gente que limpia el predio a la mañana siguiente (arranca escondida) ---
+const limpieza = crearLimpieza({ escenarios, jugador, camara });
+escena.add(limpieza.grupo);
+
+// --- El desmayo y la mañana siguiente ---
+// Las horas del día siguiente siguen contando desde la misma medianoche (ver grilla.js).
+const HORA_AL_DESPERTAR = (24 + 7) * 60; // 07:00
+
+// Empieza a caerse: suelta lo que tenga en la mano, se le baja la chica de los hombros y
+// la vista pasa a primera persona (la caída se ve desde sus ojos).
+function alCaer() {
+  pedidos.soltar();
+  chica.irse();
+  grilla.cerrar();
+  terceraPersona.verEnPrimeraPersona();
+}
+
+// Con la pantalla en negro: pasan las horas. Termina el festival y aparece la gente que limpia.
+function alDormirse() {
+  for (const escenario of escenarios) {
+    escenario.userData.programacion.terminarFestival();
+    escenario.userData.luces.apagar();
+  }
+  genteDelMedio.grupo.visible = false;
+  pedidos.cerrar();
+  grilla.ponerHora(HORA_AL_DESPERTAR);
+  // Se despierta mirando al operario que barre al lado suyo.
+  acciones.mirarHacia(limpieza.aparecer());
+}
+
+// Abre los ojos: le hablan.
+function alDespertar() {
+  limpieza.hablar();
+}
 
 // --- Pantalla de inicio, pausa y mira ---
 // El mismo cartel sirve de pantalla de inicio y de pantalla de pausa:
@@ -399,6 +464,7 @@ jugador.controles.addEventListener('unlock', () => {
 });
 
 // --- Teclas P (pausa) y M (silencio) ---
+// El volumen general lo ponemos en el bucle de animación (ver "Bucle de animación").
 const avisoSilencio = document.getElementById('aviso-silencio');
 let silenciado = false;
 
@@ -410,10 +476,8 @@ document.addEventListener('keydown', (event) => {
   }
 
   // M: silenciar o activar el sonido, sin pausar (la música sigue avanzando).
-  // setMasterVolume cambia el volumen general de los "oídos" del jugador: 0 = mudo.
   if (event.code === 'KeyM') {
     silenciado = !silenciado; // ! da vuelta el valor: true pasa a false y al revés
-    oyente.setMasterVolume(silenciado ? 0 : 1);
     avisoSilencio.style.display = silenciado ? 'block' : 'none';
   }
 });
@@ -501,6 +565,7 @@ function animar(tiempo) {
   const enPausa = !jugador.controles.isLocked;
   if (!enPausa) {
     pedidos.actualizar(delta); // antes que acciones: cambia el gesto de llevar a la boca
+    borrachera.actualizar(delta); // también antes que acciones: cambia el mareo de la cámara
     acciones.actualizar(delta);
     grilla.actualizar(delta); // avanza el reloj...
     cielo.actualizar(grilla.minutos()); // ...y con su hora, el cielo
@@ -510,7 +575,10 @@ function animar(tiempo) {
     }
     chica.actualizar(delta);
     genteDelMedio.actualizar(delta);
+    limpieza.actualizar(delta);
   }
+  // Volumen general de los "oídos" del jugador: 0 = mudo. Lo apaga la tecla M o el desmayo.
+  oyente.setMasterVolume(silenciado ? 0 : borrachera.volumen());
   for (const escenario of escenarios) {
     escenario.userData.musica.actualizarVolumen(camara.position);
     // Los aplausos bajan con la distancia igual que la música. En pausa no se escuchan.
@@ -547,14 +615,8 @@ function animar(tiempo) {
   // Cuerpo del jugador y cámara de tercera persona (también en pausa: así la vista no se rompe).
   terceraPersona.actualizar(delta);
 
-  // Dibujamos el cuadro con la cámara de la vista elegida (primera o tercera persona):
-  // con bloom pasa por el composer, sin bloom va directo a la pantalla.
-  const camaraVista = terceraPersona.camaraActiva();
-  if (USAR_BLOOM) {
-    pasadaEscena.camera = camaraVista;
-    composer.render(delta);
-  } else {
-    renderer.render(escena, camaraVista);
-  }
+  // Dibujamos el cuadro con la cámara de la vista elegida (primera o tercera persona).
+  pasadaEscena.camera = terceraPersona.camaraActiva();
+  composer.render(delta);
 }
 requestAnimationFrame(animar);

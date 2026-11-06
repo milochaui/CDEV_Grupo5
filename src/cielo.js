@@ -1,4 +1,5 @@
-// Cielo que pasa del atardecer a la noche siguiendo la hora del festival (de 18:00 a 21:00).
+// Cielo que pasa del atardecer a la noche siguiendo la hora del festival (de 18:00 a 21:00),
+// y que a la mañana siguiente amanece (de 05:00 a 08:00, se ve al despertarse del desmayo).
 // Cambian de a poco los colores del cielo (y de la niebla), las luces generales y
 // la altura del sol, que se esconde detrás del horizonte. Al oscurecer aparecen las estrellas.
 //
@@ -14,8 +15,11 @@ import * as THREE from 'three';
 // El cielo sigue la hora del reloj del festival (ver grilla.js), en minutos desde la medianoche.
 const HORA_ATARDECER = 18 * 60; // 18:00, cuando empiezan las primeras bandas
 const HORA_NOCHE = 21 * 60; // 21:00, noche cerrada: arrancan las bandas de la noche
+// Las horas del día siguiente siguen contando desde la misma medianoche (ver ponerHora en grilla.js).
+const HORA_ALBA = (24 + 5) * 60; // 05:00 del día siguiente: empieza a clarear
+const HORA_MANANA = (24 + 8) * 60; // 08:00 del día siguiente: ya es de día
 
-// Momentos del cielo, en orden. t va de 0 (atardecer) a 1 (noche cerrada).
+// Momentos del cielo, en orden. t va de 0 (atardecer) a 1 (noche cerrada) y de ahí a 2 (mañana).
 // Entre un momento y el siguiente, los colores y las intensidades se mezclan de a poco.
 // arriba / medio / horizonte: los tres colores del degradé del cielo.
 const MOMENTOS = [
@@ -49,6 +53,26 @@ const MOMENTOS = [
     luzDirecta: 0xaabbff, // ya es la luz de la luna
     intensidadDirecta: 0.6,
   },
+  {
+    t: 1.4, // amanecer
+    arriba: 0x34508f,
+    medio: 0xc98f92, // rosado
+    horizonte: 0xf2b27c, // naranja suave
+    luzCielo: 0xffd8b0,
+    intensidadGeneral: 1.4,
+    luzDirecta: 0xffb080,
+    intensidadDirecta: 1.2,
+  },
+  {
+    t: 2, // mañana
+    arriba: 0x3f78b8, // celeste
+    medio: 0x8db6d8,
+    horizonte: 0xcfd8d4, // casi blanco
+    luzCielo: 0xfff4e0,
+    intensidadGeneral: 1.8,
+    luzDirecta: 0xfff0d0, // ya es el sol de la mañana
+    intensidadDirecta: 1.8,
+  },
 ];
 
 // --- Sol ---
@@ -58,16 +82,21 @@ const POSICION_SOL = { x: -150, z: -400 };
 const ALTURA_SOL_INICIO = 40; // metros
 const ALTURA_SOL_FINAL = -30; // metros (bajo el horizonte)
 const T_PUESTA_SOL = 0.5; // en qué momento termina de esconderse (a mitad del anochecer)
+// A la mañana sale del lado contrario (el sol se pone de un lado y sale del otro).
+const POSICION_SOL_MANANA = { x: 150, z: 400 };
+const ALTURA_SOL_MANANA = 170; // metros (a la hora HORA_MANANA)
 
 // --- Estrellas ---
 const CANTIDAD_ESTRELLAS = 700;
 const RADIO_CIELO = 450; // metros: las estrellas están sobre una esfera enorme alrededor del predio
 const T_APARECEN_ESTRELLAS = 0.4; // empiezan a verse en pleno anochecer...
 const T_TODAS_LAS_ESTRELLAS = 1; // ...y se ven del todo con la noche cerrada
+const T_SIN_ESTRELLAS = 1.3; // al amanecer se van apagando hasta este momento
 
 // --- Resplandor del atardecer ---
 // Una mancha de luz en el horizonte, del lado del sol. Se apaga a medida que anochece.
 const T_SIN_RESPLANDOR = 0.7;
+const RESPLANDOR_AMANECER = 0.6; // al amanecer vuelve del lado por donde sale el sol, más suave
 
 // Radio de la esfera del cielo: más grande que todo lo demás (el predio llega a 250 m
 // del centro y las estrellas están a 450 m), pero menos que lo que ve la cámara (1000 m).
@@ -112,17 +141,22 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
 
   // En qué columna del canvas queda el sol. La esfera reparte la vuelta completa
   // (2π radianes) a lo ancho del canvas; atan2 nos da en qué ángulo está el sol.
-  let anguloSol = Math.atan2(POSICION_SOL.z, -POSICION_SOL.x);
-  if (anguloSol < 0) anguloSol += Math.PI * 2; // lo pasamos a un ángulo entre 0 y 2π
-  const columnaSol = (anguloSol / (Math.PI * 2)) * canvas.width;
+  function columnaDelSol(posicion) {
+    let angulo = Math.atan2(posicion.z, -posicion.x);
+    if (angulo < 0) angulo += Math.PI * 2; // lo pasamos a un ángulo entre 0 y 2π
+    return (angulo / (Math.PI * 2)) * canvas.width;
+  }
+  const columnaAtardecer = columnaDelSol(POSICION_SOL);
+  const columnaManana = columnaDelSol(POSICION_SOL_MANANA);
 
   // Colores del degradé que reusamos en cada cuadro
   const arriba = new THREE.Color();
   const medio = new THREE.Color();
   const horizonte = new THREE.Color();
 
-  // Dibuja el cielo con los colores actuales. "resplandor" va de 0 a 1.
-  function dibujarCielo(resplandor) {
+  // Dibuja el cielo con los colores actuales. "resplandor" va de 0 a 1 y "columnaSol" dice
+  // de qué lado está.
+  function dibujarCielo(resplandor, columnaSol) {
     const mitad = canvas.height / 2; // la fila del horizonte
     const degrade = ctx.createLinearGradient(0, 0, 0, canvas.height);
     degrade.addColorStop(0, arriba.getStyle()); // cenit
@@ -220,7 +254,14 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
   function actualizar(minutos) {
     // t: qué parte del camino entre el atardecer y la noche ya pasó. Antes de las 18:00
     // da menos de 0 y después de las 21:00 más de 1: con min y max lo dejamos entre 0 y 1.
-    const t = Math.min(1, Math.max(0, (minutos - HORA_ATARDECER) / (HORA_NOCHE - HORA_ATARDECER)));
+    // Desde el alba seguimos contando, de 1 (noche) a 2 (mañana).
+    function entre0y1(valor) {
+      return Math.min(1, Math.max(0, valor));
+    }
+    const t = minutos < HORA_ALBA
+      ? entre0y1((minutos - HORA_ATARDECER) / (HORA_NOCHE - HORA_ATARDECER))
+      : 1 + entre0y1((minutos - HORA_ALBA) / (HORA_MANANA - HORA_ALBA));
+    const esDeManana = t > 1;
 
     // Buscamos entre qué dos momentos estamos...
     let i = 0;
@@ -236,7 +277,12 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
     arriba.lerpColors(colorA.setHex(desde.arriba), colorB.setHex(hasta.arriba), avance);
     medio.lerpColors(colorA.setHex(desde.medio), colorB.setHex(hasta.medio), avance);
     horizonte.lerpColors(colorA.setHex(desde.horizonte), colorB.setHex(hasta.horizonte), avance);
-    dibujarCielo(Math.max(0, 1 - t / T_SIN_RESPLANDOR));
+    if (esDeManana) {
+      // Un seno de 0 a π: el resplandor sube y vuelve a apagarse a medida que aclara.
+      dibujarCielo(Math.sin((t - 1) * Math.PI) * RESPLANDOR_AMANECER, columnaManana);
+    } else {
+      dibujarCielo(Math.max(0, 1 - t / T_SIN_RESPLANDOR), columnaAtardecer);
+    }
     // La niebla, del color del horizonte: así el piso se funde con el cielo a lo lejos.
     escena.fog.color.copy(horizonte);
 
@@ -247,15 +293,25 @@ export function crearCielo({ escena, luzGeneral, luzDirecta }) {
     luzDirecta.intensity = mezclar(desde.intensidadDirecta, hasta.intensidadDirecta, avance);
 
     // El sol baja hasta esconderse. Después lo apagamos (visible = false): ya no hace falta dibujarlo.
-    const bajada = Math.min(1, t / T_PUESTA_SOL);
-    sol.position.set(POSICION_SOL.x, mezclar(ALTURA_SOL_INICIO, ALTURA_SOL_FINAL, bajada), POSICION_SOL.z);
-    sol.visible = bajada < 1;
+    // A la mañana sale del otro lado y va subiendo.
+    if (esDeManana) {
+      const altura = mezclar(ALTURA_SOL_FINAL, ALTURA_SOL_MANANA, t - 1);
+      sol.position.set(POSICION_SOL_MANANA.x, altura, POSICION_SOL_MANANA.z);
+      sol.visible = true;
+    } else {
+      const bajada = Math.min(1, t / T_PUESTA_SOL);
+      sol.position.set(POSICION_SOL.x, mezclar(ALTURA_SOL_INICIO, ALTURA_SOL_FINAL, bajada), POSICION_SOL.z);
+      sol.visible = bajada < 1;
+    }
     halo.position.copy(sol.position);
     halo.visible = sol.visible;
 
     // Estrellas: aparecen de a poco (opacidad de 0 a 1) mientras oscurece.
-    const aparicion = (t - T_APARECEN_ESTRELLAS) / (T_TODAS_LAS_ESTRELLAS - T_APARECEN_ESTRELLAS);
-    materialEstrellas.opacity = Math.min(1, Math.max(0, aparicion));
+    // Y a la mañana se apagan, también de a poco.
+    const aparicion = esDeManana
+      ? 1 - (t - 1) / (T_SIN_ESTRELLAS - 1)
+      : (t - T_APARECEN_ESTRELLAS) / (T_TODAS_LAS_ESTRELLAS - T_APARECEN_ESTRELLAS);
+    materialEstrellas.opacity = entre0y1(aparicion);
     estrellas.visible = materialEstrellas.opacity > 0; // invisibles no hace falta dibujarlas
   }
 

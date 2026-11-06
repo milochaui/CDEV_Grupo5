@@ -17,6 +17,10 @@ import {
   geometriaCuerpo,
   geometriaCabeza,
   geometriaBrazo,
+  geometriaSombra,
+  materialSombra,
+  ALTURA_SOMBRA,
+  LARGO_BRAZO,
   ANGULO_BRAZO_ABAJO,
   POSICION_HOMBROS,
   BRAZOS_AGARRAN_ADELANTE,
@@ -43,6 +47,13 @@ const DISTANCIA_MIRADA = 3; // mira a un punto que está estos metros delante de
 const ANGULO_BRAZOS_ARRIBA = 2.8; // como el público (π sería derecho para arriba)
 const VELOCIDAD_BRAZOS = 4; // como en acciones.js: 1/4 de segundo en subir o bajar
 
+// --- Tomar fernet: el brazo derecho con el vaso (ver gesto en acciones.js) ---
+const BRAZO_SOSTIENE_VASO = -1; // giro hacia adelante, con el vaso en la mano
+const BRAZO_EN_LA_BOCA = -1.95;
+const COSTADO_EN_LA_BOCA = 0.35; // el brazo se cierra hacia la cara
+const INCLINACION_VASO = 0.9; // cuánto se inclina el vaso hacia la cara (radianes)
+const CABEZA_PARA_ATRAS = 0.45; // radianes
+
 // Mezcla dos valores: con t = 0 da a, con t = 1 da b (igual que en publico.js).
 function mezclar(a, b, t) {
   return a + (b - a) * t;
@@ -58,7 +69,7 @@ function mezclar(a, b, t) {
  *        y para no sacar la cámara del predio)
  * @param {object} opciones.acciones  Lo que devuelve crearAcciones (para levantar los brazos)
  * @returns {{ actualizar: (delta: number) => void, camaraActiva: () => THREE.PerspectiveCamera,
- *             hombros: THREE.Object3D }}
+ *             hombros: THREE.Object3D, verEnPrimeraPersona: () => void }}
  *          hombros: donde se sienta alguien que va subido (lo usa chica.js)
  */
 export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
@@ -79,6 +90,19 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
   const brazoDer = new THREE.Mesh(geometriaBrazo, materialPiel);
   brazoDer.position.set(-0.27, ALTO_CUERPO - 0.05, 0);
   cuerpo.add(brazoIzq, brazoDer);
+
+  // El vaso de fernet, en la mano derecha. Solo se ve mientras tiene uno.
+  const vaso = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.04, 0.14, 10),
+    new THREE.MeshStandardMaterial({ color: 0x3a1b0b, roughness: 0.6 })
+  );
+  vaso.position.y = -LARGO_BRAZO - 0.05;
+  vaso.visible = false;
+  brazoDer.add(vaso);
+
+  // Sombra en el piso, como la del público.
+  const sombra = new THREE.Mesh(geometriaSombra, materialSombra);
+  cuerpo.add(sombra);
 
   // El jugador también tiene su remera de banda. Su estampado no se mueve solo: va pegado
   // al cuerpo, así que le damos la matriz "identidad" (sin mover ni girar nada).
@@ -108,7 +132,7 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
   // --- Tecla V: cambiar de vista (solo mientras se juega) ---
   let enTerceraPersona = false;
   document.addEventListener('keydown', (event) => {
-    if (event.code === TECLA_VISTA && !event.repeat && jugador.controles.isLocked) {
+    if (event.code === TECLA_VISTA && !event.repeat && jugador.puedeActuar()) {
       enTerceraPersona = !enTerceraPersona;
     }
   });
@@ -139,6 +163,10 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
     camara.getWorldDirection(direccion);
     cuerpo.position.set(camara.position.x, camara.position.y - ALTURA_OJOS, camara.position.z);
     cuerpo.rotation.y = Math.atan2(direccion.x, direccion.z);
+    // La sombra no salta con el cuerpo: se queda en el piso.
+    sombra.position.y = ALTURA_SOMBRA - cuerpo.position.y;
+    // Le avisamos a las acciones desde dónde se está viendo (ver gesto en acciones.js).
+    acciones.gesto.desdeAfuera = enTerceraPersona;
 
     // Brazos: arriba con la E (como los de primera persona). Abajo cuelgan o, si lleva a
     // alguien en los hombros, lo agarran de los tobillos (como el público, ver publico.js).
@@ -152,7 +180,21 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
     const costado = mezclar(costadoAbajo, ANGULO_BRAZOS_ARRIBA, levantado);
     // Cada brazo gira hacia su lado: el izquierdo con ángulo positivo, el derecho con negativo.
     brazoIzq.rotation.set(adelante, 0, costado);
-    brazoDer.rotation.set(adelante, 0, -costado);
+
+    // El brazo derecho, si tiene un vaso, lo sostiene adelante y con gesto.boca lo lleva a la cara.
+    const gesto = acciones.gesto;
+    let adelanteDerecho = adelante;
+    let costadoDerecho = -costado;
+    if (gesto.vaso) {
+      adelanteDerecho = mezclar(mezclar(BRAZO_SOSTIENE_VASO, adelante, levantado), BRAZO_EN_LA_BOCA, gesto.boca);
+      costadoDerecho = mezclar(costadoDerecho, COSTADO_EN_LA_BOCA, gesto.boca);
+    }
+    brazoDer.rotation.set(adelanteDerecho, 0, costadoDerecho);
+    // El vaso queda derecho (lo giramos al revés que el brazo) y se inclina al tomar.
+    vaso.visible = gesto.vaso;
+    vaso.rotation.x = -adelanteDerecho - gesto.boca * INCLINACION_VASO;
+    // Al tomar echa la cabeza para atrás.
+    cabeza.rotation.x = -gesto.cabeza * CABEZA_PARA_ATRAS;
 
     // Cámara de tercera persona: atrás del jugador (en la dirección contraria a la que
     // mira) y un poco más arriba, mirando a un punto delante de él.
@@ -170,5 +212,10 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
     return enTerceraPersona ? camaraTercera : camara;
   }
 
-  return { actualizar, camaraActiva, hombros };
+  // Vuelve a la primera persona (el desmayo se ve desde los ojos del jugador).
+  function verEnPrimeraPersona() {
+    enTerceraPersona = false;
+  }
+
+  return { actualizar, camaraActiva, hombros, verEnPrimeraPersona };
 }

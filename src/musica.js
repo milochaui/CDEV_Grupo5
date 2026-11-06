@@ -122,6 +122,7 @@ export function crearMusica(oyente) {
   let pausado = false; // el jugador puso pausa
   let entreTemas = false; // terminó un tema y todavía no empezó el siguiente
   let siguienteListo = false; // ya pasó el silencio entre temas
+  let esperaEntreTemas = null; // el setTimeout del silencio entre temas (para poder cancelarlo)
   const avisos = []; // funciones a las que avisamos cuando termina un tema
   // Cuántos temas empezaron a sonar desde que arrancó la música. A diferencia de "indice",
   // nunca vuelve a 0: sirve para distinguir una vez que suena un tema de la vez siguiente.
@@ -158,7 +159,8 @@ export function crearMusica(oyente) {
   function terminarTema(segundos) {
     entreTemas = true;
     // setTimeout llama a la función después de esa cantidad de milisegundos.
-    setTimeout(() => {
+    // Guardamos lo que devuelve para poder cancelarlo si se corta el set (ver cortarSet).
+    esperaEntreTemas = setTimeout(() => {
       siguienteListo = true;
       // Si justo está en pausa no avanzamos: lo hace reanudar() al volver.
       if (!pausado) {
@@ -202,6 +204,30 @@ export function crearMusica(oyente) {
     entreTemas = false;
     siguienteListo = false;
     reproducirTemaActual();
+  }
+
+  // Corta el set de golpe: la banda deja de tocar aunque le queden temas.
+  // Lo usa el atajo para adelantar el reloj (ver grilla.js), así sube la banda que sigue.
+  function cortarSet() {
+    // Si estaba en el silencio entre temas, cancelamos la espera: si no, al cumplirse
+    // seguiría con el próximo tema de la banda que ya se bajó.
+    clearTimeout(esperaEntreTemas);
+    enSet = false;
+    entreTemas = false;
+    siguienteListo = false;
+    elemento.pause();
+  }
+
+  // Saltea el tema que está sonando y pasa directo al siguiente del set, sin el silencio
+  // entre temas. Si era el último (y no hay que repetir), el set termina y la banda se baja.
+  // También lo usa el atajo para adelantar el reloj (ver grilla.js).
+  function pasarTema() {
+    if (!enSet) {
+      return; // no hay ninguna banda tocando
+    }
+    clearTimeout(esperaEntreTemas); // si estaba en el silencio entre temas, no esperamos más
+    elemento.pause();
+    avanzar();
   }
 
   // Pausa el tema. El <audio> se acuerda en qué segundo quedó.
@@ -303,7 +329,7 @@ export function crearMusica(oyente) {
   }
 
   return {
-    sonido, tocarSet, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
+    sonido, tocarSet, cortarSet, pasarTema, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
     alTerminarTema, hayShow, faltaAudio,
     segundosDelTema, numeroDeTema,
   };

@@ -1,6 +1,7 @@
 // Show de luces de un escenario, al ritmo de la música:
 //  - Los reflectores barren la tarima. Con los temas conocidos se mueven más rápido
 //    y salen a barrer al público.
+//  - Una luz de verdad barre el piso y a la gente, del color del escenario.
 //  - Los haces, las luces de la tarima y la pantalla del fondo flashean con cada golpe grave.
 //    Con los temas tranquilos el flash es mucho más suave.
 import * as THREE from 'three';
@@ -28,6 +29,14 @@ const BRILLO_PANTALLA = 0.8; // el brillo que tiene la pantalla (ver escenario.j
 const BRILLO_PANTALLA_GOLPE = 0.8; // lo que suma un golpe, con euforia total
 const FLASH_TRANQUI = 0.25; // con un tema tranquilo, los flashes tienen el 25 % de fuerza
 
+// --- Luz sobre el público ---
+const INTENSIDAD_PUBLICO_TRANQUI = 200;
+const INTENSIDAD_PUBLICO_EUFORIA = 700;
+const INTENSIDAD_PUBLICO_GOLPE = 1400; // lo que suma un golpe, con euforia total
+const DISTANCIA_PUBLICO = 14; // metros desde el frente de la tarima hasta donde apunta
+const BARRIDO_PUBLICO_X = 12; // metros que se mueve para los costados...
+const BARRIDO_PUBLICO_Z = 6; // ...y hacia adelante y atrás
+
 // --- Pulso: la misma idea que en artistas.js ---
 // Un valor de 0 a 1 que salta con cada golpe grave y se apaga enseguida.
 const SENSIBILIDAD_PULSO = 12;
@@ -48,15 +57,17 @@ function mezclar(a, b, t) {
  *        Para cada reflector: dónde está colgado, a dónde apunta quieto y el largo de su haz
  * @param {THREE.Material} partes.materialHaz  El material que comparten los 4 haces
  * @param {THREE.SpotLight[]} partes.luces  Las luces de la tarima
+ * @param {THREE.SpotLight} partes.luzPublico  La luz que apunta al público
  * @param {THREE.MeshStandardMaterial} partes.materialPantalla
  * @param {object} musica  La música del escenario (ver crearMusica en musica.js)
- * @returns {{ actualizar: (delta: number) => void }}
+ * @returns {{ actualizar: (delta: number) => void, apagar: () => void }}
  */
 export function crearShowDeLuces(partes, musica) {
   let reloj = 0;
   let energia = 0; // 0 = tema tranquilo, 1 = tema conocido (cambia de a poco)
   let pulso = 0;
   let promedioGraves = 0;
+  let apagado = false; // terminó el festival (ver apagar)
 
   // Los reusamos en cada cuadro para no crear vectores nuevos todo el tiempo.
   const objetivoLocal = new THREE.Vector3();
@@ -67,6 +78,9 @@ export function crearShowDeLuces(partes, musica) {
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
    */
   function actualizar(delta) {
+    if (apagado) {
+      return;
+    }
     reloj += delta;
 
     // --- 1. Energía según el tema (igual que la euforia del público) ---
@@ -124,7 +138,29 @@ export function crearShowDeLuces(partes, musica) {
       luz.intensity = INTENSIDAD_LUZ + flash * INTENSIDAD_LUZ_GOLPE;
     }
     partes.materialPantalla.emissiveIntensity = BRILLO_PANTALLA + flash * BRILLO_PANTALLA_GOLPE;
+
+    // --- 5. Luz sobre el público: barre con dos ondas, como los reflectores ---
+    partes.luzPublico.intensity =
+      mezclar(INTENSIDAD_PUBLICO_TRANQUI, INTENSIDAD_PUBLICO_EUFORIA, energia) + flash * INTENSIDAD_PUBLICO_GOLPE;
+    partes.luzPublico.target.position.set(
+      Math.sin(reloj * velocidad) * BARRIDO_PUBLICO_X,
+      0,
+      partes.luzPublico.position.z + DISTANCIA_PUBLICO + Math.sin(reloj * velocidad * 0.7) * BARRIDO_PUBLICO_Z
+    );
   }
 
-  return { actualizar };
+  // Terminó el festival: apagamos los haces, las luces de la tarima y la pantalla.
+  function apagar() {
+    apagado = true;
+    for (const reflector of partes.reflectores) {
+      reflector.haz.visible = false;
+    }
+    for (const luz of partes.luces) {
+      luz.intensity = 0;
+    }
+    partes.luzPublico.intensity = 0;
+    partes.materialPantalla.emissiveIntensity = 0;
+  }
+
+  return { actualizar, apagar };
 }

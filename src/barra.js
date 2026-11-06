@@ -1,6 +1,8 @@
 // Barra de fernet y choripán: un puesto en el predio con su barman y su parrilla.
 // Parado frente a la barra, el jugador pide un fernet (R) o un choripán (C) y lo ve en
 // su mano. Con clic toma un trago o da un mordisco, hasta que se termina.
+// El fernet viene en un vaso transparente: el líquido baja de a poco mientras toma y su
+// superficie siempre queda horizontal, por más que el vaso se incline.
 import * as THREE from 'three';
 import { crearPersona, posar } from './artistas.js';
 
@@ -12,7 +14,24 @@ const TECLA_CHORI = 'KeyC';
 const DISTANCIA_PARA_PEDIR = 4; // metros desde el frente de la barra
 const TRAGOS_POR_FERNET = 4;
 const MORDISCOS_POR_CHORI = 3;
-const DURACION_BOCADO = 0.9; // segundos: llevar a la boca y volver
+const DURACION_BOCADO = 0.9; // segundos: llevar el choripán a la boca y volver
+
+// --- El trago de fernet: sube el vaso, toma y lo baja (segundos de cada parte) ---
+const SEGUNDOS_SUBIR_VASO = 0.4;
+const SEGUNDOS_TOMAR = 0.85;
+const SEGUNDOS_BAJAR_VASO = 0.45;
+// Cuánto inclina el vaso hacia la cara (radianes). Cuanto más vacío, más hay que inclinarlo.
+const INCLINACION_VASO_LLENO = 1.2;
+const INCLINACION_VASO_VACIO = 1.75;
+const SACUDIDA_TRAGANDO = 0.12; // la cabeza se mueve un poquito con cada trago de garganta
+const VECES_QUE_TRAGA_POR_SEGUNDO = 3;
+
+// --- Medidas del vaso, en metros (más angosto abajo, como un vaso de plástico) ---
+const ALTO_VASO = 0.14;
+const RADIO_BOCA_VASO = 0.05;
+const RADIO_BASE_VASO = 0.04;
+const ALTO_LIQUIDO = 0.115; // lleno, el líquido llega hasta acá (arriba va la espuma)
+const ESPESOR_ESPUMA = 0.018;
 
 // --- Medidas del puesto, en metros ---
 const ANCHO_PUESTO = 7;
@@ -31,7 +50,7 @@ const FONDO_PUESTO = 2.4; // desde el frente del mostrador hasta la pared de atr
  * @param {object} config
  * @param {{x: number, z: number}} config.posicion
  * @param {{x: number, z: number}} config.mirarHacia
- * @returns {{ grupo: THREE.Group, colisiones: Array, frente: THREE.Vector3 }}
+ * @returns {{ grupo: THREE.Group, colisiones: Array, frente: THREE.Vector3, sacarBarman: () => void }}
  *          frente: el lugar del predio donde se para el que pide (ver crearPedidos)
  */
 export function crearBarra(config) {
@@ -147,7 +166,12 @@ export function crearBarra(config) {
   // El frente: 1.5 m delante del mostrador, en coordenadas del predio.
   const frente = grupo.localToWorld(new THREE.Vector3(0, 0, 1.5));
 
-  return { grupo, colisiones, frente };
+  // Terminado el festival, el barman se va (ver cerrar en crearPedidos).
+  function sacarBarman() {
+    barman.grupo.visible = false;
+  }
+
+  return { grupo, colisiones, frente, sacarBarman };
 }
 
 // Cartel arriba del techo, dibujado en un <canvas> como el de los escenarios.
@@ -195,33 +219,119 @@ function crearMaterialEnMano(color) {
   });
 }
 
-// Crea una pieza para la mano, con renderOrder alto: va después de los brazos (100 y 101).
-function piezaEnMano(geometria, color) {
+// Crea una pieza para la mano. "orden" es su renderOrder: como no se fijan quién está delante
+// (depthTest: false), se dibujan en este orden, después de los brazos (100 y 101).
+function piezaEnMano(geometria, color, orden = 102, opacidad = 1) {
   const malla = new THREE.Mesh(geometria, crearMaterialEnMano(color));
-  malla.renderOrder = 102;
+  malla.material.opacity = opacidad;
+  malla.renderOrder = orden;
   return malla;
 }
 
-// Vaso de fernet. Devuelve el grupo y una función para cambiar cuánto queda (de 0 a 1).
+// Limita un valor entre 0 y 1.
+function entre0y1(valor) {
+  return Math.min(1, Math.max(0, valor));
+}
+
+// Pasa de 0 a 1 arrancando y frenando despacio, en vez de a velocidad pareja.
+// Con esto el vaso sube y baja como un movimiento de verdad.
+function suavizar(valor) {
+  const t = entre0y1(valor);
+  return t * t * (3 - 2 * t);
+}
+
+function mezclar(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// Una capa de lo que hay adentro del vaso (el líquido o la espuma): un cilindro cuyo piso y
+// techo podemos mover punto por punto, para que siga la forma del vaso y quede horizontal.
+function crearCapaDeVaso(color, orden, opacidad = 1) {
+  const geometria = new THREE.CylinderGeometry(RADIO_BOCA_VASO, RADIO_BOCA_VASO, 1, 20);
+  geometria.translate(0, 0.5, 0); // el piso en y = 0 y el techo en y = 1
+  const malla = piezaEnMano(geometria, color, orden, opacidad);
+  // Three.js calcula una sola vez si esto entra en la vista, y los puntos se van a mover.
+  malla.frustumCulled = false;
+  const posiciones = geometria.attributes.position;
+  const originales = posiciones.clone(); // la forma de cilindro, para no perderla
+
+  // alturaPiso y alturaTecho son funciones: dan la altura que corresponde en cada (x, z).
+  function acomodar(alturaPiso, alturaTecho) {
+    for (let i = 0; i < posiciones.count; i++) {
+      const x = originales.getX(i);
+      const z = originales.getZ(i);
+      const esTecho = originales.getY(i) > 0.5;
+      // Que no se salga del vaso, ni por abajo ni por arriba.
+      const y = Math.min(ALTO_VASO, Math.max(0, esTecho ? alturaTecho(x, z) : alturaPiso(x, z)));
+      // El vaso es más angosto abajo: a esta altura, el círculo se achica.
+      const radio = mezclar(RADIO_BASE_VASO, RADIO_BOCA_VASO, y / ALTO_VASO);
+      posiciones.setXYZ(i, (x * radio) / RADIO_BOCA_VASO, y, (z * radio) / RADIO_BOCA_VASO);
+    }
+    posiciones.needsUpdate = true;
+  }
+  return { malla, acomodar };
+}
+
+// Vaso de fernet. Devuelve el grupo, una función para cambiar cuánto queda (de 0 a 1) y otra
+// para dejar horizontal la superficie del líquido (se llama en cada cuadro).
 function crearFernetEnMano() {
   const grupo = new THREE.Group();
-  grupo.position.set(-0.07, -0.04, 0); // al lado de la mano, del lado de adentro
-  const altoVaso = 0.13;
+  grupo.position.set(-0.07, -0.05, 0); // al lado de la mano, del lado de adentro
 
-  // El líquido con la base en y = 0: así, al achicarlo en alto, baja desde arriba.
-  const geometriaLiquido = new THREE.CylinderGeometry(0.045, 0.038, altoVaso, 12);
-  geometriaLiquido.translate(0, altoVaso / 2, 0);
-  const liquido = piezaEnMano(geometriaLiquido, 0x2b1408);
-  const espuma = piezaEnMano(new THREE.CylinderGeometry(0.046, 0.046, 0.025, 12), 0xc9a27a);
-  espuma.renderOrder = 103; // encima del líquido
-  grupo.add(liquido, espuma);
+  // Primero lo de adentro y después el plástico y los dedos, que van por encima.
+  const liquido = crearCapaDeVaso(0x3a1b0b, 102);
+  // La espuma es medio transparente: al empinar el vaso se ve el fernet a través de ella.
+  const espuma = crearCapaDeVaso(0xc99f74, 103, 0.45);
+
+  const geometriaParedes = new THREE.CylinderGeometry(RADIO_BOCA_VASO, RADIO_BASE_VASO, ALTO_VASO, 20, 1, true);
+  geometriaParedes.translate(0, ALTO_VASO / 2, 0);
+  const paredes = piezaEnMano(geometriaParedes, 0xffffff, 104, 0.14);
+
+  const geometriaBorde = new THREE.TorusGeometry(RADIO_BOCA_VASO, 0.003, 6, 24);
+  geometriaBorde.rotateX(Math.PI / 2); // acostado, como la boca del vaso
+  geometriaBorde.translate(0, ALTO_VASO, 0);
+  const borde = piezaEnMano(geometriaBorde, 0xffffff, 104, 0.55);
+  grupo.add(liquido.malla, espuma.malla, paredes, borde);
+
+  // Tres dedos que abrazan el vaso, del lado de la mano.
+  const geometriaDedo = new THREE.BoxGeometry(0.06, 0.018, 0.014);
+  for (const altura of [0.04, 0.065, 0.09]) {
+    const dedo = piezaEnMano(geometriaDedo, 0xf1c27d, 105);
+    dedo.material.emissive.setHex(0x2a1a10); // el mismo brillo que la mano (ver acciones.js)
+    dedo.position.set(0.035, altura, RADIO_BOCA_VASO - 0.012);
+    grupo.add(dedo);
+  }
+
+  let cuantoQueda = 1;
+  const arriba = new THREE.Vector3(); // hacia dónde queda "arriba" del mundo, visto desde el vaso
+  const giroDelVaso = new THREE.Quaternion();
 
   function cambiarCuantoQueda(fraccion) {
-    liquido.scale.y = Math.max(0.01, fraccion);
-    espuma.position.y = altoVaso * fraccion + 0.0125; // la espuma va arriba del líquido
+    cuantoQueda = fraccion;
   }
-  cambiarCuantoQueda(1);
-  return { grupo, cambiarCuantoQueda };
+
+  // La superficie de un líquido queda siempre horizontal, aunque se incline el vaso.
+  // Para lograrlo le preguntamos al vaso cómo está girado en el mundo: con ese giro al revés,
+  // sabemos dónde le queda "arriba". Si "arriba" está corrido hacia un costado del vaso, el
+  // líquido sube de ese lado contrario y baja del otro: es la ecuación de un plano.
+  function acomodarLiquido() {
+    grupo.getWorldQuaternion(giroDelVaso);
+    arriba.set(0, 1, 0).applyQuaternion(giroDelVaso.invert());
+    // Math.max: con el vaso casi acostado, dividir por algo muy chico daría números enormes.
+    const divisor = Math.max(0.2, arriba.y);
+    // Casi vacío casi no se nota la inclinación: si no, parecería que queda más de lo que hay.
+    const casiVacio = Math.min(1, cuantoQueda * 4);
+    const nivel = ALTO_LIQUIDO * cuantoQueda;
+    const superficie = (x, z) => nivel - (casiVacio * (arriba.x * x + arriba.z * z)) / divisor;
+
+    liquido.malla.visible = cuantoQueda > 0.01;
+    espuma.malla.visible = cuantoQueda > 0.01;
+    liquido.acomodar(() => 0, superficie);
+    espuma.acomodar(superficie, (x, z) => superficie(x, z) + ESPESOR_ESPUMA * casiVacio);
+  }
+
+  acomodarLiquido();
+  return { grupo, cambiarCuantoQueda, acomodarLiquido };
 }
 
 // Choripán: pan y chorizo, a lo largo hacia el centro de la pantalla.
@@ -259,23 +369,48 @@ function crearChoriEnMano() {
  * @param {object} opciones.acciones  Lo que devuelve crearAcciones (la mano y el gesto)
  * @param {object} opciones.jugador  Lo que devuelve crearJugador (para saber si hay pausa)
  * @param {THREE.Camera} opciones.camara  Para saber dónde está el jugador
- * @returns {{ actualizar: (delta: number) => void }}
+ * @param {object} opciones.borrachera  Lo que devuelve crearBorrachera: le avisamos cada trago
+ * @returns {{ actualizar: (delta: number) => void, soltar: () => void, cerrar: () => void }}
  */
-export function crearPedidos({ barra, acciones, jugador, camara }) {
+export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
   const aviso = document.getElementById('aviso-barra');
 
   let enMano = null; // { tipo: 'fernet' o 'chori', grupo, cambiarCuantoQueda } o null
   let quedan = 0; // tragos o mordiscos que quedan
   let tiempoBocado = -1; // segundos desde que empezó el trago o mordisco (−1 = no está)
   let yaConsumio = false; // si en este bocado ya restamos uno
+  let quedabaAlEmpezar = 0; // de 0 a 1: cuánto fernet había cuando empezó este trago
   let cerca = false;
+  let cerrada = false; // terminado el festival, ya no se puede pedir nada
 
   // Saca lo que tenga en la mano (si tiene algo).
   function vaciarMano() {
     if (enMano !== null) {
       acciones.manoDerecha.remove(enMano.grupo);
       enMano = null;
+      acciones.gesto.vaso = false;
     }
+  }
+
+  // La mano y la cabeza vuelven a su lugar.
+  function terminarGesto() {
+    tiempoBocado = -1;
+    acciones.gesto.boca = 0;
+    acciones.gesto.inclinacion = 0;
+    acciones.gesto.cabeza = 0;
+  }
+
+  // Suelta lo que tenga en la mano, aunque esté en medio de un trago (al desmayarse).
+  function soltar() {
+    vaciarMano();
+    terminarGesto();
+  }
+
+  // Cierra la barra: terminó el festival.
+  function cerrar() {
+    cerrada = true;
+    barra.sacarBarman();
+    soltar();
   }
 
   function pedir(tipo) {
@@ -284,10 +419,11 @@ export function crearPedidos({ barra, acciones, jugador, camara }) {
     enMano.tipo = tipo;
     quedan = tipo === 'fernet' ? TRAGOS_POR_FERNET : MORDISCOS_POR_CHORI;
     acciones.manoDerecha.add(enMano.grupo);
+    acciones.gesto.vaso = tipo === 'fernet';
   }
 
   document.addEventListener('keydown', (event) => {
-    if (!jugador.controles.isLocked || !cerca || tiempoBocado >= 0) {
+    if (!jugador.puedeActuar() || !cerca || cerrada || tiempoBocado >= 0) {
       return;
     }
     if (event.code === TECLA_FERNET) pedir('fernet');
@@ -296,9 +432,10 @@ export function crearPedidos({ barra, acciones, jugador, camara }) {
 
   // Clic (botón izquierdo = 0): tomar un trago o dar un mordisco.
   document.addEventListener('mousedown', (event) => {
-    if (event.button === 0 && jugador.controles.isLocked && enMano !== null && tiempoBocado < 0) {
+    if (event.button === 0 && jugador.puedeActuar() && enMano !== null && tiempoBocado < 0) {
       tiempoBocado = 0;
       yaConsumio = false;
+      quedabaAlEmpezar = quedan / TRAGOS_POR_FERNET; // solo se usa con el fernet
     }
   });
 
@@ -312,6 +449,53 @@ export function crearPedidos({ barra, acciones, jugador, camara }) {
     }
   }
 
+  // Resta un trago o mordisco. Cada trago de fernet suma alcohol: un fernet entero son
+  // TRAGOS_POR_FERNET tragos.
+  function consumir() {
+    yaConsumio = true;
+    quedan--;
+    if (enMano.tipo === 'fernet') {
+      borrachera.tomarTrago(1 / TRAGOS_POR_FERNET);
+    }
+  }
+
+  // Trago de fernet, en tres partes: sube el vaso, toma (el líquido va bajando de a poco y
+  // el vaso se inclina cada vez más) y lo baja. Devuelve true cuando terminó.
+  function animarTrago() {
+    const subida = suavizar(tiempoBocado / SEGUNDOS_SUBIR_VASO);
+    const bajada = suavizar((tiempoBocado - SEGUNDOS_SUBIR_VASO - SEGUNDOS_TOMAR) / SEGUNDOS_BAJAR_VASO);
+    const pose = subida * (1 - bajada); // 0 = abajo, 1 = en la boca
+    const tomado = entre0y1((tiempoBocado - SEGUNDOS_SUBIR_VASO) / SEGUNDOS_TOMAR); // de 0 a 1
+
+    const queda = quedabaAlEmpezar - suavizar(tomado) / TRAGOS_POR_FERNET;
+    enMano.cambiarCuantoQueda(queda);
+    if (tomado >= 0.5 && !yaConsumio) {
+      consumir();
+    }
+
+    acciones.gesto.boca = pose;
+    acciones.gesto.inclinacion = pose * mezclar(INCLINACION_VASO_LLENO, INCLINACION_VASO_VACIO, 1 - queda);
+    // Mientras toma, la cabeza se mueve apenas con cada trago de garganta. El seno de 0 a π
+    // hace que arranque y termine sin saltos.
+    const tragando = Math.sin(Math.PI * tomado) * Math.sin(tiempoBocado * Math.PI * 2 * VECES_QUE_TRAGA_POR_SEGUNDO);
+    acciones.gesto.cabeza = pose + tragando * SACUDIDA_TRAGANDO;
+
+    return tiempoBocado >= SEGUNDOS_SUBIR_VASO + SEGUNDOS_TOMAR + SEGUNDOS_BAJAR_VASO;
+  }
+
+  // Mordisco de choripán: la mano va a la boca y vuelve. Devuelve true cuando terminó.
+  function animarMordisco() {
+    const avance = tiempoBocado / DURACION_BOCADO; // de 0 a 1
+    // Un seno de 0 a π sube de 0 a 1 y vuelve a 0.
+    acciones.gesto.boca = Math.sin(Math.PI * Math.min(1, avance));
+    // En la mitad (con la mano en la boca) se come un poco.
+    if (avance >= 0.5 && !yaConsumio) {
+      consumir();
+      enMano.cambiarCuantoQueda(quedan / MORDISCOS_POR_CHORI);
+    }
+    return avance >= 1;
+  }
+
   /**
    * Se llama en cada cuadro, salvo en pausa (ver main.js).
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
@@ -323,29 +507,25 @@ export function crearPedidos({ barra, acciones, jugador, camara }) {
     // --- Trago o mordisco en curso ---
     if (tiempoBocado >= 0) {
       tiempoBocado += delta;
-      const avance = tiempoBocado / DURACION_BOCADO; // de 0 a 1
-      // La mano va a la boca y vuelve: un seno de 0 a π sube de 0 a 1 y vuelve a 0.
-      acciones.gesto.boca = Math.sin(Math.PI * Math.min(1, avance));
-
-      // En la mitad (con la mano en la boca) se toma o se come un poco.
-      if (avance >= 0.5 && !yaConsumio) {
-        yaConsumio = true;
-        quedan--;
-        const total = enMano.tipo === 'fernet' ? TRAGOS_POR_FERNET : MORDISCOS_POR_CHORI;
-        enMano.cambiarCuantoQueda(quedan / total);
-      }
-      if (avance >= 1) {
-        tiempoBocado = -1;
-        acciones.gesto.boca = 0;
+      const termino = enMano.tipo === 'fernet' ? animarTrago() : animarMordisco();
+      if (termino) {
+        terminarGesto();
         if (quedan === 0) {
           vaciarMano(); // se terminó
         }
       }
     }
 
+    // El líquido queda horizontal aunque el jugador mire para arriba, salte o levante el brazo.
+    if (enMano !== null && enMano.tipo === 'fernet') {
+      enMano.acomodarLiquido();
+    }
+
     // --- Aviso en pantalla ---
     let texto = '';
-    if (cerca) {
+    if (cerca && cerrada) {
+      texto = 'La barra está cerrada';
+    } else if (cerca) {
       texto = 'R: pedir un fernet   ·   C: pedir un choripán';
     } else if (enMano !== null) {
       texto = enMano.tipo === 'fernet'
@@ -355,5 +535,5 @@ export function crearPedidos({ barra, acciones, jugador, camara }) {
     mostrar(texto);
   }
 
-  return { actualizar };
+  return { actualizar, soltar, cerrar };
 }

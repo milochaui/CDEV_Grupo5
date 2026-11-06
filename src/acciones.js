@@ -26,8 +26,11 @@ const INERCIA_SALTO_BRAZOS = 0.03; // al saltar, los brazos "se quedan atrás" u
 
 // --- Algo en la mano derecha (un fernet o un choripán, ver barra.js) ---
 const ANGULO_SOSTENER = -1.05; // en reposo, el brazo derecho más arriba para que se vea lo que tiene
-const ANGULO_BOCA = -0.5; // brazo levantado hacia la cara (tomar o comer)
-const COSTADO_BOCA = 0.5; // y hacia el centro de la pantalla
+// Brazo llevado a la boca (tomar o comer). La boca queda abajo de los ojos: por eso la mano
+// va a la parte de abajo de la pantalla, y no al medio (si no, el vaso tapa toda la vista).
+const ANGULO_BOCA = -0.75;
+const COSTADO_BOCA = 0.52; // y hacia el centro de la pantalla
+const CABECEO_TRAGO = 0.3; // cuánto echa la cabeza para atrás al tomar (radianes, 0.3 ≈ 17°)
 
 // --- Salto ---
 // Con estos valores el salto sube unos 85 cm y dura unos 0.75 segundos.
@@ -50,6 +53,12 @@ const FRENADO_EMPUJON = 6; // más grande = se frena antes. Cada empujón mueve 
 const TIEMPO_ENTRE_EMPUJONES_MIN = 0.4; // segundos
 const TIEMPO_ENTRE_EMPUJONES_MAX = 1.2; // segundos
 
+// --- Ronda de pogo (ver ronda.js) ---
+const MARGEN_ADENTRO_DE_RONDA = 0.5; // metros afuera del círculo en los que ya te agarra el pogo
+const MARGEN_CERCA_DE_RONDA = 12; // metros afuera del círculo en los que ves el aviso
+const SACUDIDA_EN_RONDA = 0.6; // adentro de la ronda te sacude aunque no aprietes F (de 0 a 1)
+const EMPUJON_EN_RONDA = 1.6; // adentro de la ronda los empujones son más fuertes (multiplica)
+
 // --- Contagio al público ---
 // Euforia extra que suma cada acción a la gente pegada al jugador
 // (la euforia del tema va de 0 = tranquilos a 1 = euforia total).
@@ -62,6 +71,10 @@ const FACTOR_TEMA_TRANQUI = 0.4;
 const RADIO_CONTAGIO = 6; // metros alrededor del jugador a los que llega el contagio
 const MULTIPLICADOR_SALTO_POGO = 1.6; // con pogo, los de al lado saltan hasta 1.6 veces más alto
 const SEGUNDOS_CONTAGIO = 1; // lo que tarda el contagio en aparecer (o irse) del todo
+
+// --- Borrachera (ver borrachera.js): con el alcohol al máximo, todo se hace con más ganas ---
+const CONTAGIO_EXTRA_BORRACHO = 0.5; // contagia un 50 % más
+const AGITE_EXTRA_BORRACHO = 1; // agita los brazos el doble
 
 // ---------------------------------------------------------------------------
 // Forma de los brazos
@@ -147,14 +160,24 @@ export function escenarioEntreElPublico(escenarios, posicion) {
  * @param {THREE.PerspectiveCamera} opciones.camara  La cámara del jugador (tiene que estar en la escena)
  * @param {object} opciones.jugador  Lo que devuelve crearJugador (ver jugador.js)
  * @param {Array<THREE.Group>} opciones.escenarios  Los escenarios (con su música y su público en userData)
+ * @param {object} opciones.borrachera  Lo que devuelve crearBorrachera: cuánto se marea la cámara
+ *        y cuánta euforia tiene el jugador
  * @returns {{ actualizar: (delta: number) => void,
- *             estado: {brazos: boolean, cantando: boolean, pogo: boolean, saltando: boolean},
- *             manoDerecha: THREE.Group, gesto: {boca: number} }}
+ *             estado: {brazos: boolean, cantando: boolean, pogo: boolean, saltando: boolean, enRonda: boolean},
+ *             manoDerecha: THREE.Group,
+ *             gesto: {boca: number, inclinacion: number, cabeza: number, vaso: boolean, desdeAfuera: boolean},
+ *             mirarHacia: (punto: THREE.Vector3) => void }}
  *  - estado dice qué está haciendo el jugador en este momento (lo usa aguante.js).
  *  - manoDerecha: lo que se agregue a este grupo aparece en la mano derecha (ver barra.js).
- *  - gesto.boca: de 0 a 1, cuánto lleva la mano derecha a la boca (lo cambia barra.js).
+ *  - gesto: cómo está tomando o comiendo. Lo cambia barra.js:
+ *      boca: de 0 a 1, cuánto lleva la mano derecha a la boca.
+ *      inclinacion: cuánto inclina el vaso hacia la cara (radianes).
+ *      cabeza: de 0 a 1, cuánto echa la cabeza para atrás.
+ *      vaso: si tiene un fernet en la mano (el cuerpo de tercera persona también lo muestra).
+ *    Y terceraPersona.js cambia desdeAfuera: true si se está viendo el cuerpo desde atrás.
+ *  - mirarHacia: da vuelta la cámara hacia un punto (la usa main.js al despertarse).
  */
-export function crearAcciones({ camara, jugador, escenarios }) {
+export function crearAcciones({ camara, jugador, escenarios, borrachera }) {
   // --- Brazos ---
   // Son hijos de la cámara: se mueven y giran con ella, siempre en el mismo lugar de la pantalla.
   // La cámara mira hacia -Z: x positivo es la derecha, y negativo es abajo.
@@ -171,7 +194,10 @@ export function crearAcciones({ camara, jugador, escenarios }) {
   const manoDerecha = new THREE.Group();
   manoDerecha.position.y = LARGO_ANTEBRAZO + 0.06; // donde está la mano
   brazoDerecho.add(manoDerecha);
-  const gesto = { boca: 0 };
+  const gesto = { boca: 0, inclinacion: 0, cabeza: 0, vaso: false, desdeAfuera: false };
+  // Los reusamos en cada cuadro para calcular cómo queda lo que tiene en la mano (paso 5).
+  const giroEnMano = new THREE.Euler();
+  const giroDeseado = new THREE.Quaternion();
 
   // --- Cartelitos en pantalla (están en index.html) ---
   const indicador = document.getElementById('indicador-acciones');
@@ -190,7 +216,7 @@ export function crearAcciones({ camara, jugador, escenarios }) {
   let contagioPogo = 0; // 0 a 1: cuánto del "salto más alto" del pogo contagiamos
 
   // Qué está haciendo el jugador. Lo completamos en cada cuadro y lo lee el aguante-metro.
-  const estado = { brazos: false, cantando: false, pogo: false, saltando: false };
+  const estado = { brazos: false, cantando: false, pogo: false, saltando: false, enRonda: false };
 
   // Inclinación de la cámara que pusimos en el cuadro anterior (radianes).
   let inclinacionAplicada = 0; // hacia arriba (cantar)
@@ -203,7 +229,7 @@ export function crearAcciones({ camara, jugador, escenarios }) {
 
     // Saltar: solo al apretar (no al mantener) y si está en el piso.
     // event.repeat es true cuando la tecla quedó apretada y el navegador la "repite".
-    if (event.code === TECLA_SALTAR && !event.repeat && jugador.controles.isLocked && alturaSalto === 0) {
+    if (event.code === TECLA_SALTAR && !event.repeat && jugador.puedeActuar() && alturaSalto === 0) {
       velocidadVertical = VELOCIDAD_SALTO;
     }
   });
@@ -235,9 +261,29 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     costadoAplicado = costado;
   }
 
+  // Hace mirar a la cámara hacia un punto. lookAt pisa toda la orientación, así que no hay
+  // ninguna inclinación del cuadro anterior que deshacer: las dejamos en 0.
+  function mirarHacia(punto) {
+    inclinacionAplicada = 0;
+    costadoAplicado = 0;
+    camara.lookAt(punto);
+  }
+
   // true si hay suficiente gente alrededor del jugador en alguno de los escenarios.
   function estaEntreElPublico() {
     return escenarioEntreElPublico(escenarios, camara.position) !== null;
+  }
+
+  // Si hay una ronda activa cerca del jugador en algún escenario, devuelve su fase ('armando'
+  // o 'pogo'); si no, null. margen: metros afuera del círculo que también cuentan.
+  function faseDeRondaCerca(margen) {
+    for (const escenario of escenarios) {
+      const fase = escenario.userData.publico.faseRondaCerca(camara.position, margen);
+      if (fase !== null) {
+        return fase;
+      }
+    }
+    return null;
   }
 
   // Muestra u oculta un cartelito, y le pone el texto. Solo toca la página si algo cambió.
@@ -256,11 +302,15 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     reloj += delta;
 
     // --- ¿Qué está haciendo el jugador? ---
-    const conBrazosArriba = teclas[TECLA_BRAZOS] === true;
-    const cantando = teclas[TECLA_CANTAR] === true;
-    const quierePogo = teclas[TECLA_POGO] === true;
+    // Desmayado no hace nada, aunque tenga las teclas apretadas.
+    const puede = jugador.puedeActuar();
+    const conBrazosArriba = puede && teclas[TECLA_BRAZOS] === true;
+    const cantando = puede && teclas[TECLA_CANTAR] === true;
+    const quierePogo = puede && teclas[TECLA_POGO] === true;
+    // ¿Está adentro de una ronda con el pogo andando? Ahí te lleva puesto, apretes F o no.
+    const enRonda = puede && faseDeRondaCerca(MARGEN_ADENTRO_DE_RONDA) === 'pogo';
     // Solo contamos gente si apretó F (así no hacemos cuentas de más).
-    const haciendoPogo = quierePogo && estaEntreElPublico();
+    const haciendoPogo = quierePogo && (enRonda || estaEntreElPublico());
 
     // --- 1. Salto ---
     // La gravedad le resta velocidad hacia arriba; con la velocidad cambia la altura.
@@ -277,7 +327,13 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     // --- 2. Valores que cambian de a poco (0 a 1) ---
     levantado = acercar(levantado, conBrazosArriba ? 1 : 0, VELOCIDAD_LEVANTAR * delta);
     cantar = acercar(cantar, cantando ? 1 : 0, VELOCIDAD_INCLINAR * delta);
-    pogo = acercar(pogo, haciendoPogo ? 1 : 0, VELOCIDAD_INCLINAR * delta);
+    let objetivoPogo = 0;
+    if (haciendoPogo) {
+      objetivoPogo = 1;
+    } else if (enRonda) {
+      objetivoPogo = SACUDIDA_EN_RONDA;
+    }
+    pogo = acercar(pogo, objetivoPogo, VELOCIDAD_INCLINAR * delta);
 
     // --- 3. Pogo: sacudida y empujones ---
     // Una onda (seno) rápida para el rebote y otra más lenta para ladearse de costado.
@@ -285,11 +341,12 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     const rebote = Math.abs(onda) * SACUDIDA_ALTURA * pogo; // Math.abs: siempre para arriba
     const ladeo = Math.sin(reloj * Math.PI * SACUDIDAS_POR_SEGUNDO * 0.7) * SACUDIDA_COSTADO * pogo;
 
-    if (haciendoPogo && reloj >= proximoEmpujon) {
+    if ((haciendoPogo || enRonda) && reloj >= proximoEmpujon) {
       // Empujón en una dirección al azar (un ángulo de 0 a 360°).
       const angulo = Math.random() * Math.PI * 2;
-      empujon.x = Math.cos(angulo) * VELOCIDAD_EMPUJON;
-      empujon.z = Math.sin(angulo) * VELOCIDAD_EMPUJON;
+      const fuerza = enRonda ? VELOCIDAD_EMPUJON * EMPUJON_EN_RONDA : VELOCIDAD_EMPUJON;
+      empujon.x = Math.cos(angulo) * fuerza;
+      empujon.z = Math.sin(angulo) * fuerza;
       proximoEmpujon = reloj + mezclar(TIEMPO_ENTRE_EMPUJONES_MIN, TIEMPO_ENTRE_EMPUJONES_MAX, Math.random());
     }
     // El empujón nos mueve (sin atravesar nada: desplazar revisa las colisiones) y se va frenando.
@@ -299,12 +356,19 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     empujon.z *= frenado;
 
     // --- 4. Cámara: altura (salto + rebote) e inclinación (cantar + ladeo) ---
-    camara.position.y = ALTURA_OJOS + alturaSalto + rebote;
-    inclinarCamara(INCLINACION_CANTAR * cantar, ladeo);
+    // Más lo que le sume la borrachera: el bamboleo y, si se desmaya, la caída.
+    // Al tomar, también echa la cabeza para atrás. Visto desde afuera lo hace el cuerpo
+    // (ver terceraPersona.js): si inclináramos la cámara, esa vista se movería de golpe.
+    const mareo = borrachera.mareo;
+    const cabeceo = gesto.desdeAfuera ? 0 : gesto.cabeza * CABECEO_TRAGO;
+    camara.position.y = ALTURA_OJOS + alturaSalto + rebote + mareo.altura;
+    inclinarCamara(INCLINACION_CANTAR * cantar + mareo.inclinacion + cabeceo, ladeo + mareo.costado);
 
     // --- 5. Brazos ---
     // Ángulo hacia adelante: de reposo a arriba según "levantado", más los extras.
-    const agite = Math.sin(reloj * Math.PI * 2 * AGITES_POR_SEGUNDO) * AGITE_BRAZOS * levantado;
+    // Cuanto más borracho, más los agita.
+    const fuerzaAgite = AGITE_BRAZOS * (1 + borrachera.euforia() * AGITE_EXTRA_BORRACHO);
+    const agite = Math.sin(reloj * Math.PI * 2 * AGITES_POR_SEGUNDO) * fuerzaAgite * levantado;
     let anguloAdelante = mezclar(ANGULO_BRAZOS_REPOSO, ANGULO_BRAZOS_ARRIBA, levantado);
     anguloAdelante += pogo * (BRAZOS_POGO + onda * 0.15); // con pogo van hacia adelante y rebotan
     anguloAdelante -= velocidadVertical * INERCIA_SALTO_BRAZOS; // al subir bajan un poco, y al revés
@@ -325,9 +389,11 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     const costadoDerecho = mezclar(anguloCostado + agite, COSTADO_BOCA, gesto.boca);
     brazoDerecho.rotation.set(adelanteDerecho, 0, costadoDerecho);
     brazoIzquierdo.rotation.set(anguloAdelante, 0, -anguloCostado + agite);
-    // Lo que tiene en la mano queda derecho: lo giramos al revés que el brazo.
-    // Al llevarlo a la boca lo dejamos inclinar un poco (como al tomar de un vaso).
-    manoDerecha.rotation.x = -adelanteDerecho * (1 - 0.5 * gesto.boca);
+    // Lo que tiene en la mano no gira con el brazo: queda derecho respecto de la cámara,
+    // salvo lo que se incline para tomar. Para eso multiplicamos dos giros: el inverso del
+    // brazo (que lo deshace) y el que queremos. Con x positivo, la boca del vaso va hacia la cara.
+    giroDeseado.setFromEuler(giroEnMano.set(gesto.inclinacion, 0, 0));
+    manoDerecha.quaternion.copy(brazoDerecho.quaternion).invert().multiply(giroDeseado);
 
     // --- 6. Contagio al público ---
     let objetivoContagio = 0;
@@ -346,7 +412,7 @@ export function crearAcciones({ camara, jugador, escenarios }) {
         : FACTOR_TEMA_TRANQUI;
       escenario.userData.publico.contagiar(
         camara.position,
-        contagio * factorTema,
+        contagio * factorTema * (1 + borrachera.euforia() * CONTAGIO_EXTRA_BORRACHO),
         RADIO_CONTAGIO,
         mezclar(1, MULTIPLICADOR_SALTO_POGO, contagioPogo)
       );
@@ -357,14 +423,27 @@ export function crearAcciones({ camara, jugador, escenarios }) {
     estado.cantando = cantando;
     estado.pogo = haciendoPogo;
     estado.saltando = alturaSalto > 0; // está en el aire
+    estado.enRonda = enRonda;
 
     // --- 8. Cartelitos ---
     const partes = [];
     if (cantando) partes.push('🎤 Cantando');
     if (haciendoPogo) partes.push('🤘 Pogo');
+    else if (enRonda) partes.push('💥 En la ronda');
     mostrar(indicador, partes.join('   '));
-    mostrar(avisoPogo, quierePogo && !haciendoPogo ? 'Metete entre el público para hacer pogo' : '');
+
+    // Aviso del pogo: si está cerca de una ronda, le contamos qué está pasando.
+    const faseCerca = faseDeRondaCerca(MARGEN_CERCA_DE_RONDA);
+    let textoPogo = '';
+    if (faseCerca === 'armando') {
+      textoPogo = '🌀 ¡Se está armando la ronda! Ya explota el tema...';
+    } else if (faseCerca === 'pogo' && !haciendoPogo) {
+      textoPogo = enRonda ? 'F: ¡dejá todo en el pogo!' : '🤘 ¡Explotó! Metete en la ronda';
+    } else if (quierePogo && !haciendoPogo) {
+      textoPogo = 'Metete entre el público para hacer pogo';
+    }
+    mostrar(avisoPogo, textoPogo);
   }
 
-  return { actualizar, estado, manoDerecha, gesto };
+  return { actualizar, estado, manoDerecha, gesto, mirarHacia };
 }

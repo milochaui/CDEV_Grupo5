@@ -2,9 +2,13 @@
 
 Trabajo final de la materia **Creatividad y Desarrollo en Entornos Virtuales** — UTN FRC.
 
-Simulador 3D en primera persona de un festival de música con tres escenarios, hecho con Three.js. El jugador recorre el predio y, a medida que se acerca a cada escenario, escucha la música de la banda que toca ahí: el sonido es posicional, así que cerca de un escenario se escucha fuerte y desde el centro del predio las bandas suenan de fondo. Frente a cada escenario hay público que reacciona al tema y salta con los graves, con más fuerza en los temas más conocidos. Mucha gente lleva remeras de las bandas del festival, y entre el público hay quienes ondean banderas y otros subidos a los hombros de alguien. En el medio del predio hay rondas de amigos y gente sentada en mantitas, y todo el predio está cerrado por vallas. El jugador arranca afuera, en la entrada, frente al portal con el cartel del festival: **Salve Salve Rockanrol**. Si estás metido entre el público cuando empieza un tema tranqui, una chica te pide que la subas a tus hombros y podés decirle que sí o que no. Con la tecla V se pasa a una vista en tercera persona, donde se ve el cuerpo del jugador (y a la chica, si la subiste).
+Simulador 3D en primera persona de un festival de música con tres escenarios, hecho con Three.js. El jugador recorre el predio y, a medida que se acerca a cada escenario, escucha la música de la banda que toca ahí: el sonido es posicional, así que cerca de un escenario se escucha fuerte y desde el centro del predio las bandas suenan de fondo. Frente a cada escenario hay público que reacciona al tema y salta con los graves, con más fuerza en los temas más conocidos. Mucha gente lleva remeras de las bandas del festival, y entre el público hay quienes ondean banderas y otros subidos a los hombros de alguien. En el medio del predio hay rondas de amigos y gente sentada en mantitas, y todo el predio está cerrado por vallas. El jugador arranca afuera, en la entrada, frente al portal con el cartel del festival: **Salve Salve Rockanrol**. Si estás metido entre el público cuando empieza un tema tranqui, una chica te pide que la subas a tus hombros y podés decirle que sí o que no; si la subiste, la podés bajar cuando quieras. Con la tecla V se pasa a una vista en tercera persona, donde se ve el cuerpo del jugador (y a la chica, si la subiste).
 
 Arriba de cada escenario toca la banda, con show de luces, pantalla en vivo y fuegos artificiales al terminar los temas conocidos. El público aplaude al final de cada tema y prende la linterna del celular en los temas tranquis. El cielo pasa del atardecer a la noche, y hay una barra de fernet y choripán. Cuanto más participa el jugador cerca de un escenario, más se llena el aguante-metro; lleno, el cantante lo saluda.
+
+Los pogos se arman como en un recital: unos segundos antes de que explote un tema conocido, dos rockeros empiezan a abrir la ronda; cuando explota, salta todo el público, vuelan papelitos desde la tarima y la ronda se llena de gente chocándose. Si el jugador se queda adentro, lo lleva puesto.
+
+Los fernets emborrachan: los colores y las luces se ponen más intensos y laten con la música, la vista se marea y el jugador contagia más al público. Con unos 5 fernets se desmaya y se despierta a la mañana siguiente, con el festival terminado y la gente limpiando el predio.
 
 Arriba a la izquierda hay un reloj con la hora del festival, y con la tecla G se abre la grilla con los horarios de cada escenario. El festival arranca a las 17:58 y el reloj corre 10 veces más rápido que el tiempo real (las 3 horas de la tarde duran 18 minutos de juego). En cada escenario tocan tres bandas, una después de la otra: cada una sube cuando llega su horario, toca un tema tranqui y uno para el pogo, y se baja. Entre banda y banda el cartel anuncia a la que sigue. A las 21:00, ya de noche, suben las bandas principales, que tocan sin parar. Cada banda tiene su look arriba del escenario, el nombre en el bombo, los trapos de sus fans en la valla y, las uruguayas, banderas de Uruguay en el público.
 
@@ -96,12 +100,14 @@ public/
 | Espacio | Saltar |
 | E (mantener) | Levantar los brazos |
 | Q (mantener) | Cantar |
-| F (mantener) | Pogo (solo metido entre el público) |
+| F (mantener) | Pogo (metido entre el público o adentro de una ronda) |
 | R / C (frente a la barra) | Pedir un fernet / un choripán |
 | Clic (con algo en la mano) | Tomar un trago / dar un mordisco |
 | G | Abrir / cerrar la grilla de horarios |
+| T | Adelantar el reloj hasta que empieza la próxima banda (para la demo: corta a la banda anterior) |
 | V | Cambiar entre primera y tercera persona |
 | 1 / 2 | Responder que sí / que no (cuando la chica pide subirse a los hombros) |
+| B | Bajar a la chica de los hombros |
 | Esc o P | Pausa (se detiene la música y el público se congela) |
 | M | Silenciar / activar el sonido |
 | Clic | Entrar al juego / continuar después de la pausa |
@@ -113,16 +119,20 @@ public/
 - `src/escenario.js`: construcción de cada escenario y su programación (qué banda sube y cuándo).
 - `src/musica.js`: reproducción del set de cada banda con sonido posicional.
 - `src/publico.js`: el público frente a cada escenario y su reacción a la música.
+- `src/ronda.js`: las rondas de pogo: los rockeros que las abren antes del boom del tema y el pogo cuando explota.
 - `src/jugador.js`: control en primera persona y colisiones.
 - `src/acciones.js`: acciones del recital (brazos en primera persona, salto, cantar y pogo) y su contagio al público.
 - `src/artistas.js`: los músicos de las nueve bandas, cada uno con su look y sus instrumentos.
 - `src/luces.js`: show de luces de cada escenario, al ritmo de la música.
 - `src/pantalla.js`: pantalla en vivo que filma a la banda.
 - `src/fuegos.js`: fuegos artificiales al terminar los temas conocidos.
+- `src/papelitos.js`: los papelitos que vuelan sobre el público cuando explota un tema.
 - `src/aplausos.js`: aplausos y gritos sintetizados al terminar cada tema.
 - `src/cielo.js`: cielo del atardecer a la noche (sigue la hora del reloj), con sol y estrellas.
 - `src/predio.js`: piso del predio (pasto, tierra pisada y caminos) y guirnaldas de banderines.
 - `src/barra.js`: barra de fernet y choripán.
+- `src/borrachera.js`: lo que le pasa al jugador con los fernets (efectos en la imagen, la cámara y el sonido, euforia) y el desmayo.
+- `src/limpieza.js`: la gente que limpia el predio y la basura, a la mañana siguiente del desmayo.
 - `src/aguante.js`: el aguante-metro.
 - `src/grilla.js`: reloj del festival y grilla de horarios.
 - `src/chica.js`: la chica que pide subirse a los hombros durante los temas tranquis.
