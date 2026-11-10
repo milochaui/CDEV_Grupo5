@@ -2,7 +2,7 @@
 
 Trabajo final de la materia **Creatividad y Desarrollo en Entornos Virtuales** — UTN FRC.
 
-Simulador 3D en primera persona de un festival de música con tres escenarios, hecho con Three.js. El jugador recorre el predio y, a medida que se acerca a cada escenario, escucha la música de la banda que toca ahí: el sonido es posicional, así que cerca de un escenario se escucha fuerte y desde el centro del predio las bandas suenan de fondo. Frente a cada escenario hay público que reacciona al tema y salta con los graves, con más fuerza en los temas más conocidos. Mucha gente lleva remeras de las bandas del festival, y entre el público hay quienes ondean banderas y otros subidos a los hombros de alguien. En el medio del predio hay rondas de amigos y gente sentada en mantitas, y todo el predio está cerrado por vallas. El jugador arranca afuera, en la entrada, frente al portal con el cartel del festival: **Salve Salve Rockanrol**. Si estás metido entre el público cuando empieza un tema tranqui, una chica te pide que la subas a tus hombros y podés decirle que sí o que no; si la subiste, la podés bajar cuando quieras. Con la tecla V se pasa a una vista en tercera persona, donde se ve el cuerpo del jugador (y a la chica, si la subiste).
+Simulador 3D en primera persona de un festival de música con tres escenarios y una carpa chica, hecho con Three.js. El jugador recorre el predio y, a medida que se acerca a cada escenario, escucha la música de la banda que toca ahí: el sonido es posicional, así que cerca de un escenario se escucha fuerte y desde el centro del predio las bandas suenan de fondo. Frente a cada escenario hay público que reacciona al tema y salta con los graves, con más fuerza en los temas más conocidos. Mucha gente lleva remeras de las bandas del festival, y entre el público hay quienes ondean banderas y otros subidos a los hombros de alguien. En el medio del predio hay rondas de amigos y gente sentada en mantitas, y todo el predio está cerrado por vallas. El jugador arranca afuera, en la entrada, frente al portal con el cartel del festival: **Salve Salve Rockanrol**. Si estás metido entre el público cuando empieza un tema tranqui, una chica te pide que la subas a tus hombros y podés decirle que sí o que no; si la subiste, la podés bajar cuando quieras. Con la tecla V se pasa a una vista en tercera persona, donde se ve el cuerpo del jugador (y a la chica, si la subiste).
 
 Arriba de cada escenario toca la banda, con show de luces, pantalla en vivo y fuegos artificiales al terminar los temas conocidos. El público aplaude al final de cada tema y prende la linterna del celular en los temas tranquis. El cielo pasa del atardecer a la noche, y hay una barra de fernet y choripán. Cuanto más participa el jugador cerca de un escenario, más se llena el aguante-metro; lleno, el cantante lo saluda.
 
@@ -49,18 +49,20 @@ npm run dev
 
 Después abrir en el navegador la dirección que muestra la consola (normalmente http://localhost:5173) y hacer clic en la pantalla para entrar.
 
-> **Antes de correrlo, copiar los audios** (ver la sección siguiente). Sin los mp3 el simulador abre y las bandas suben igual a su horario, pero tocan en silencio (el cartel del tema dice "falta el mp3").
+> Si falta algún mp3, el simulador abre igual y la banda sube a su horario, pero toca en silencio (el cartel del tema dice "falta el mp3").
 
 ## Audios (importante)
 
-Los archivos mp3 **no están en el repositorio**: la carpeta `public/audio` está en el `.gitignore`. Hay que copiarlos a mano en `public/audio/`, con **exactamente** estos nombres de archivo (son los que usa `src/main.js`):
+Los mp3 están en el repositorio, en `public/audio/`. Cada archivo tiene que llamarse **exactamente** como figura en las listas de temas de `src/main.js`:
 
+| Banda | Archivo | Tema |
+|---|---|---|
 | Guasones | `guasones_tranqui_pasanlashoras.mp3` | Pasan las horas |
 | Guasones | `guasones_conocido_reyesdelanoche.mp3` | Reyes de la noche |
 | Callejeros | `callejeros_tranqui_canciondecuna.mp3` | Canción de cuna |
 | Callejeros | `callejeros_conocido_rocanrolessindestino.mp3` | Rocanroles sin destino |
 | Ciro y los Persas | `ciro_conocido_astros.mp3` | Astros |
-| Ciro y los Persas | `ciro_tranquialatardecer.mp3` | Al atardecer |
+| Ciro y los Persas | `ciro_tranqui_alatardecer.mp3` | Al atardecer |
 | Turf | `turf_tranqui_locounpoco.mp3` | Loco un poco |
 | Turf | `turf_conocido_pasosalcostado.mp3` | Pasos al costado |
 | Intoxicados | `intoxicados_tranqui_nuncaquise.mp3` | Nunca quise |
@@ -80,31 +82,8 @@ Los archivos mp3 **no están en el repositorio**: la carpeta `public/audio` est�
 | Pepi y Manu (carpa) | `mv_conocido_tema2.mp3` | A definir |
 | Colo Giub (carpa) | `colo_tranqui_senorita.mp3` | Señorita (Ricardo Arjona) |
 | Colo Giub (carpa) | `colo_conocido_doctoraii.mp3` | Doctora II (Piti Fernández) |
-La carpeta tiene que quedar así:
 
-```
-public/
-└── audio/
-    ├── calamaro_conocido_sindocumentos.mp3
-    ├── calamaro_medio_todaviaunacanciondeamor.mp3
-    ├── calamaro_tranqui_buenasuerteyhastaluego.mp3
-    ├── callejeros_conocido_rocanrolessindestino.mp3
-    ├── callejeros_tranqui_unanuevanochefria.mp3
-    ├── ciro_conocido_astros.mp3
-    ├── ciro_tranqui_servidor.mp3
-    ├── guasones_conocido_reyesdelanoche.mp3
-    ├── guasones_tranqui_pasanlashoras.mp3
-    ├── intoxicados_conocido_quierenrock.mp3
-    ├── intoxicados_tranqui_nuncaquise.mp3
-    ├── ntvg_conocido_chau.mp3
-    ├── ntvg_tranqui_alasnueve.mp3
-    ├── pastillas_conocido_viejokarma.mp3
-    ├── pastillas_tranqui_mejuegoelcorazon.mp3
-    ├── turf_conocido_pasosalcostado.mp3
-    ├── turf_tranqui_locounpoco.mp3
-    ├── velapuerca_conocido_zafar.mp3
-    └── velapuerca_tranqui_llenosdemagia.mp3
-```
+**Pendiente:** todavía faltan los seis mp3 de la carpa, y los dos temas de Pepi y Manu no están definidos (cuando estén, se cambian el título y el archivo en `src/main.js`). En la carpeta también está `ciro_tranqui_servidor.mp3`, que hoy no se usa.
 
 ## Controles
 
@@ -165,3 +144,15 @@ public/
 - `src/portal.js`: el portal de la entrada, con el cartel del festival.
 - `src/terceraPersona.js`: la vista en tercera persona (el cuerpo del jugador y la cámara que lo sigue).
 - `src/remeras.js`: los estampados de las remeras de bandas que lleva la gente.
+- `src/celular.js`: el celular en la mano (tecla X), las fotos y lo que pasa cuando te lo roban o lo recuperás.
+- `src/galeria.js`: la galería para ver las fotos (tecla Z).
+- `src/robo.js`: el riesgo de que te roben el celular, el ladrón que se acerca y la persecución.
+- `src/ladron.js`: el cuerpo del ladrón (buzo con capucha) y la marca roja que lleva en la persecución.
+
+## Documentación del proyecto
+
+- `Grupo 5 SDD - CDEV.pdf`: el documento de diseño (SDD) entregado.
+- `SDD - textos corregidos (consistencia).md`: los textos del SDD actualizados para que coincidan con el simulador (se pegan en el SDD de Google Docs).
+- `Cómo se evalúa el SDD – Estudiantes.pdf`: la consigna de evaluación de la cátedra.
+- `diagramas/`: plano del predio, mapa conceptual, flujo de la experiencia, arquitectura técnica, mapa de empatía, mood board y storyboard del trailer. Los cuatro primeros se generan desde las páginas de `diagramas/fuentes/` (ver el LEEME de esa carpeta).
+- `trailer/index.html`: el trailer del simulador (se abre en el navegador).

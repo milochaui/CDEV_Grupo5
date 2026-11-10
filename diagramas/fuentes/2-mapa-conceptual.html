@@ -1,0 +1,58 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="comun.css">
+<style>
+body { width: 1500px; height: 1040px; position: relative; }
+.leyenda { position: absolute; top: 24px; right: 30px; font-size: 13px; display: flex; gap: 22px; }
+.leyenda span::before { content: ""; display: inline-block; width: 20px; height: 13px; border: 2px solid; border-radius: 4px; vertical-align: -3px; margin-right: 6px; }
+.l1::before { background: #e3ecf7; border-color: #1f3a68 !important; } .l2::before { background: #efe6f7; border-color: #6b46a3 !important; }
+.l3::before { background: #f1f1f1; border-color: #6b6b6b !important; } .l4::before { background: #fdf0dc; border-color: #e39b17 !important; }
+.usuario b.t, .tiempo b.t { text-transform: uppercase; }
+.mundo ul { margin: 0; padding: 0; list-style: none; text-align: left; } .mundo li::before { content: "• "; }
+</style></head><body>
+<h1>Mapa conceptual del diseño</h1>
+<div class="leyenda"><span class="l1">Lo que controla el usuario</span><span class="l2">El tiempo</span><span class="l3">Reglas del simulador</span><span class="l4">Respuesta del mundo</span></div>
+
+<div id="cuando" class="caja tiempo" style="left:40px;top:120px;width:260px"><b class="t">Cuándo</b>El reloj del festival arranca a las 17:58 y corre 10 veces más rápido que el tiempo real.</div>
+<div id="donde" class="caja usuario" style="left:40px;top:580px;width:260px"><b class="t">Dónde está</b>Camina o corre por el predio (W A S D, Shift): un escenario, la carpa, la barra o la plaza.</div>
+<div id="hace" class="caja usuario" style="left:40px;top:790px;width:260px"><b class="t">Qué hace</b>Levanta los brazos, canta, salta, hace pogo, pide el bis, toma fernet o come choripán, saca fotos con el celular y le responde a la chica.</div>
+
+<div id="hora" class="caja regla" style="left:380px;top:110px;width:270px"><b class="t">Hora del festival</b>Define qué banda toca en cada escenario y en la carpa, y cómo se ve el cielo (del atardecer a la noche).</div>
+<div id="tema" class="caja regla" style="left:380px;top:350px;width:270px"><b class="t">Tema que suena</b>Conocido o tranquilo. Sus golpes graves marcan el ritmo; en el boom de los conocidos explota la ronda.</div>
+<div id="distancia" class="caja regla" style="left:380px;top:570px;width:270px"><b class="t">Distancia a cada escenario</b>Define qué banda escucha y qué tan fuerte: 100 % hasta 20 m, silencio desde 78 m. La carpa se oye apagada a través de la lona.</div>
+
+<div id="energia" class="caja mundo" style="left:740px;top:140px;width:270px"><b class="t">Energía del público</b>Euforia, saltos y pogo con los temas conocidos; calma y celulares con linterna en los tranquilos.</div>
+<div id="contagio" class="caja regla" style="left:740px;top:400px;width:270px"><b class="t">Contagio y aguante-metro</b>Las acciones contagian a la gente a 6 m y llenan el aguante-metro, más rápido con los temas conocidos.</div>
+<div id="riesgo" class="caja regla" style="left:740px;top:770px;width:270px"><b class="t">Tentaciones con costo</b>Fernet: más euforia, pero mareo y, con unos 5, desmayo. Choripán: baja la borrachera. Celular afuera: sube el riesgo de que lo roben, más en el pogo y de noche.</div>
+
+<div id="respuesta" class="caja mundo" style="left:1100px;top:230px;width:360px"><b class="t">Respuesta del mundo</b><ul>
+<li>El cantante lo saluda (aguante lleno)</li><li>Aplausos y fuegos artificiales al terminar un tema</li><li>La ronda y los papelitos en el boom</li><li>El bis, si el público (y él) lo piden</li><li>La chica pide subirse a los hombros</li><li>Luces y pantalla al ritmo de los graves</li></ul></div>
+<div id="cierre" class="caja mundo" style="left:1100px;top:780px;width:360px"><b class="t">Consecuencias</b><ul>
+<li>El ladrón se acerca; si roba, empieza la persecución</li><li>El desmayo y la mañana siguiente, con el predio vacío</li><li>El resumen de la noche: todo lo que hizo</li></ul></div>
+
+<script src="flechas.js"></script>
+<script>
+flecha('cuando','der','hora','izq','define');
+flecha('hora','aba','tema','arr','qué banda toca');
+flecha('donde','der','distancia','izq','define');
+flecha('distancia','arr','tema','aba','qué banda se escucha');
+flecha('tema','der','energia','izq','define la energía', {d1:-20});
+flecha('tema','der','contagio','izq','multiplica', {d1: 15, d2:-15});
+flecha('contagio','arr','energia','aba','contagia');
+flecha('energia','der','respuesta','izq','', {d2:-40});
+flecha('contagio','der','respuesta','izq','aguante lleno', {d2: 50});
+flecha('riesgo','der','cierre','izq','');
+// "participar": sale de QUÉ HACE, sube entre las columnas y entra al contagio.
+const h = document.getElementById('hace').getBoundingClientRect();
+const co = document.getElementById('contagio').getBoundingClientRect();
+const ri = document.getElementById('riesgo').getBoundingClientRect();
+const yP = h.top + 25, yC = co.top + co.height/2 + 25;
+linea([[h.right, yP], [695, yP], [695, yC], [co.left, yC]], 'participar', {posTexto: 0.5});
+const yR = ri.top + ri.height/2 + 20;
+linea([[h.right, yR], [ri.left, yR]], 'toma, come, saca fotos', {posTexto: 0.55});
+// La vuelta: la respuesta invita a seguir.
+const r = document.getElementById('respuesta').getBoundingClientRect();
+const d = document.getElementById('donde').getBoundingClientRect();
+const xDer = r.right + 18, yAbajo = 1000;
+linea([[r.right, r.top + r.height/2], [xDer, r.top + r.height/2], [xDer, yAbajo], [18, yAbajo], [18, d.top + d.height/2], [d.left, d.top + d.height/2]],
+  'invita a seguir participando o a caminar hacia otro escenario', {color:'#1f3a68', ancho: 2.5, marca: 'pa'});
+linea([[18, h.top + h.height/2 + 30], [h.left, h.top + h.height/2 + 30]], '', {color:'#1f3a68', ancho: 2.5, marca: 'pa'});
+</script></body></html>

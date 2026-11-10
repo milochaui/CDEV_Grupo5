@@ -1,0 +1,125 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="comun.css">
+<style>
+body { width: 1640px; position: relative; padding: 76px 30px 30px; }
+h1 { top: 20px; }
+.arriba { display: flex; gap: 40px; width: 1110px; }
+.cab { border: 2px solid #1f3a68; border-radius: 10px; padding: 9px 14px; background: #eef3fa; font-size: 13px; color: #444; }
+.cab b { display: block; font-size: 15px; color: #222; }
+.principal { display: flex; gap: 30px; margin-top: 50px; align-items: flex-start; }
+.izquierda { width: 1110px; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.columna { display: flex; flex-direction: column; gap: 26px; }
+.grupo { border: 2.5px solid; border-radius: 14px; padding: 12px 14px 14px; }
+.grupo h2 { margin: 0 0 2px; font-size: 18px; } .grupo p.sub { margin: 0 0 10px; font-size: 13px; color: #555; }
+.mods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mod { background: #fff; border: 2px solid; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: #555; line-height: 1.3; }
+.mod b { display: block; font-size: 14.5px; color: #222; }
+.rojo { background: #fdf0f0; border-color: #d23b3b; } .rojo h2 { color: #c62828; } .rojo .mod { border-color: #d23b3b; }
+.azul { background: #eef3fa; border-color: #1f3a68; } .azul h2 { color: #1f3a68; } .azul .mod { border-color: #1f3a68; }
+.verde { background: #eef7ee; border-color: #2e7d32; } .verde h2 { color: #2e7d32; } .verde .mod { border-color: #2e7d32; }
+.violeta { background: #f4eefa; border-color: #6b46a3; } .violeta h2 { color: #6b46a3; } .violeta .mod { border-color: #6b46a3; }
+.naranja { background: #fdf3e6; border-color: #d98a00; } .naranja h2 { color: #c77700; } .naranja .mod { border-color: #d98a00; }
+.gris { background: #f3f3f3; border-color: #666; margin-top: 26px; width: 1110px; } .gris h2 { color: #555; } .gris .mod { border-color: #666; }
+.gris .mods { grid-template-columns: repeat(4, 1fr); }
+.bucle { width: 440px; border: 2.5px solid #1f3a68; border-radius: 14px; padding: 14px 18px; background: #f7f9fc; }
+.bucle h2 { margin: 0 0 12px; font-size: 18px; color: #1f3a68; }
+.bucle ol { margin: 0; padding: 0; list-style: none; counter-reset: n; }
+.bucle li { counter-increment: n; position: relative; padding-left: 40px; margin-bottom: 13px; font-size: 13.5px; line-height: 1.35; }
+.bucle li::before { content: counter(n); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: #1f3a68; color: #fff; font-weight: bold; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.bucle .pie { border-top: 1px solid #ccd; padding-top: 10px; font-size: 13px; color: #444; }
+.audio h2 { margin: 30px 0 10px; font-size: 18px; color: #1f3a68; }
+.cadena { display: flex; align-items: center; gap: 8px; }
+.cadena .mod { border-color: #d23b3b; background: #fdf0f0; width: 238px; }
+.cadena .flechita { font-size: 22px; color: #333; }
+</style></head><body>
+<h1>Arquitectura técnica</h1>
+<div class="arriba">
+  <div id="index" class="cab" style="width:330px"><b>index.html</b>pantalla de inicio, pausa y carteles en pantalla</div>
+  <div id="main" class="cab" style="flex:1"><b>main.js — punto de entrada</b>arma la escena, los tres escenarios y la carpa con su programación, la barra y las vallas, y corre el bucle de animación</div>
+</div>
+<div class="principal">
+  <div>
+  <div class="izquierda">
+    <div class="columna">
+      <div id="gEsc" class="grupo rojo"><h2>Escenarios (×3) y carpa — escenario.js · carpa.js</h2><p class="sub">construyen cada escenario y su programación (qué banda sube, cuándo, y el bis)</p>
+        <div class="mods">
+          <div class="mod"><b>musica.js</b>set de la banda, audio 3D, graves y lona</div>
+          <div class="mod"><b>publico.js</b>200 personas (90 en la carpa)</div>
+          <div class="mod"><b>ronda.js</b>las rondas de pogo</div>
+          <div class="mod"><b>papelitos.js</b>papelitos en el boom</div>
+          <div class="mod"><b>artistas.js</b>músicos de las 12 bandas</div>
+          <div class="mod"><b>remeras.js</b>estampados de las remeras</div>
+          <div class="mod"><b>luces.js</b>show de luces con los golpes</div>
+          <div class="mod"><b>pantalla.js</b>pantalla en vivo</div>
+          <div class="mod"><b>aplausos.js</b>ovación sintetizada</div>
+          <div class="mod"><b>fuegos.js</b>fuegos artificiales</div>
+          <div class="mod"><b>bis.js</b>"¡otra, otra!" y el bis</div>
+        </div></div>
+      <div class="grupo verde"><h2>Predio y ambiente</h2>
+        <div class="mods">
+          <div class="mod"><b>predio.js</b>piso, caminos y banderines</div>
+          <div class="mod"><b>vallas.js</b>vallado y pasillo de entrada</div>
+          <div class="mod"><b>portal.js</b>portal con el nombre</div>
+          <div class="mod"><b>cielo.js</b>del atardecer a la noche</div>
+          <div class="mod"><b>gente.js</b>rondas de amigos y mantitas</div>
+        </div></div>
+    </div>
+    <div class="columna">
+      <div id="gJug" class="grupo azul"><h2>Jugador</h2>
+        <div class="mods">
+          <div class="mod"><b>jugador.js</b>primera persona y colisiones</div>
+          <div class="mod"><b>acciones.js</b>brazos, salto, cantar, pogo y contagio</div>
+          <div class="mod"><b>aguante.js</b>el aguante-metro</div>
+          <div class="mod"><b>chica.js</b>la chica de los hombros</div>
+          <div class="mod"><b>terceraPersona.js</b>vista en tercera persona (V)</div>
+          <div class="mod"><b>resumen.js</b>el resumen de la noche</div>
+        </div></div>
+      <div class="grupo naranja"><h2>La barra, el celular y la mañana</h2>
+        <div class="mods">
+          <div class="mod"><b>barra.js</b>fernet y choripán en la mano</div>
+          <div class="mod"><b>borrachera.js</b>efectos del alcohol y desmayo</div>
+          <div class="mod"><b>celular.js</b>el celular y las fotos (X)</div>
+          <div class="mod"><b>galeria.js</b>galería de fotos (Z)</div>
+          <div class="mod"><b>robo.js</b>riesgo, ladrón y persecución</div>
+          <div class="mod"><b>ladron.js</b>el ladrón y su marca roja</div>
+          <div class="mod"><b>limpieza.js</b>operarios y basura a la mañana</div>
+        </div></div>
+      <div class="grupo violeta"><h2>Tiempo</h2>
+        <div class="mods" style="grid-template-columns:1fr"><div class="mod"><b>grilla.js</b>reloj del festival (17:58, ×10) y grilla de horarios (G)</div></div>
+        <p class="sub" style="margin:10px 0 0">La hora del reloj decide qué banda sube en cada escenario y cómo se ve el cielo. En pausa, el reloj se detiene.</p></div>
+    </div>
+  </div>
+  <div class="grupo gris"><h2>Plataforma</h2>
+    <div class="mods">
+      <div class="mod"><b>Three.js</b>escena 3D, luces, audio 3D, bloom</div>
+      <div class="mod"><b>Web Audio API</b>graves, filtros y sonidos sintetizados</div>
+      <div class="mod"><b>Vite</b>servidor de desarrollo</div>
+      <div class="mod"><b>Navegador</b>PC, teclado, mouse, auriculares</div>
+    </div></div>
+  </div>
+  <div class="bucle"><h2>Bucle de animación (≈ 60 veces por segundo)</h2><ol>
+    <li>Mueve al jugador y revisa colisiones (tarimas, parlantes, paredes de la carpa, barra, postes, portal y vallas).</li>
+    <li>Actualiza lo que tiene en la mano (fernet, choripán o celular), la borrachera y las acciones con su contagio.</li>
+    <li>Avanza el reloj: con su hora actualiza el cielo y la programación (sube la banda que sigue o el público pide el bis).</li>
+    <li>Actualiza la chica, el robo, la gente del medio, la limpieza, el resumen y el pedido del bis.</li>
+    <li>Calcula el volumen de cada banda según la distancia, y si suena a través de la lona.</li>
+    <li>Analiza los graves y actualiza el público y sus rondas, los músicos, las luces y los fuegos.</li>
+    <li>Actualiza el indicador del tema y el aguante-metro (y el saludo del cantante).</li>
+    <li>Filma la pantalla en vivo del escenario que más se escucha.</li>
+    <li>Si sacó una foto, la dibuja y la guarda. Dibuja la escena con la cámara elegida y aplica el bloom y la borrachera.</li>
+  </ol><div class="pie">En pausa (Esc o P) el bucle deja de actualizar el mundo y el reloj, y la música se detiene. Todo se mueve según el tiempo real entre cuadros, así anda igual en una compu rápida o lenta.</div></div>
+</div>
+<div class="audio"><h2>Cadena de audio de cada escenario</h2>
+<div class="cadena">
+  <div class="mod"><b>archivo mp3</b>en public/audio</div><span class="flechita">➜</span>
+  <div class="mod"><b>analizador de graves</b>40 a 150 Hz: saltos, músicos y luces</div><span class="flechita">➜</span>
+  <div class="mod"><b>filtro de la lona</b>solo a través de la carpa</div><span class="flechita">➜</span>
+  <div class="mod"><b>audio posicional y volumen</b>100 % hasta 20 m, silencio desde 78 m</div><span class="flechita">➜</span>
+  <div class="mod"><b>oídos del jugador</b>pegados a la cámara, con el filtro de la borrachera</div>
+</div></div>
+<script src="flechas.js"></script>
+<script>
+flecha('index','der','main','izq','');
+flecha('main','aba','gEsc','arr','', {d1: -260});
+flecha('main','aba','gJug','arr','', {d1: 280});
+document.title = String(document.body.scrollHeight);
+</script></body></html>
