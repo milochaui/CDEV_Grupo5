@@ -1,6 +1,7 @@
 // Barra de fernet y choripán: un puesto en el predio con su barman y su parrilla.
 // Parado frente a la barra, el jugador pide un fernet (R) o un choripán (C) y lo ve en
 // su mano. Con clic toma un trago o da un mordisco, hasta que se termina.
+// El fernet emborracha y el choripán baja la borrachera (ver borrachera.js).
 // El fernet viene en un vaso transparente: el líquido baja de a poco mientras toma y su
 // superficie siempre queda horizontal, por más que el vaso se incline.
 import * as THREE from 'three';
@@ -371,9 +372,11 @@ function crearChoriEnMano() {
  * @param {object} opciones.jugador  Lo que devuelve crearJugador (para saber si hay pausa)
  * @param {THREE.Camera} opciones.camara  Para saber dónde está el jugador
  * @param {object} opciones.borrachera  Lo que devuelve crearBorrachera: le avisamos cada trago
+ * @param {(tipo: string) => void} opciones.alTerminar  Se llama al terminar un fernet o un
+ *        choripán, con 'fernet' o 'chori' (main.js lo anota en el resumen de la noche)
  * @returns {{ actualizar: (delta: number) => void, soltar: () => void, cerrar: () => void }}
  */
-export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
+export function crearPedidos({ barra, acciones, jugador, camara, borrachera, alTerminar }) {
   const aviso = document.getElementById('aviso-barra');
 
   let enMano = null; // { tipo: 'fernet' o 'chori', grupo, cambiarCuantoQueda } o null
@@ -457,12 +460,14 @@ export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
   }
 
   // Resta un trago o mordisco. Cada trago de fernet suma alcohol: un fernet entero son
-  // TRAGOS_POR_FERNET tragos.
+  // TRAGOS_POR_FERNET tragos. Cada mordisco de choripán, en cambio, baja la borrachera.
   function consumir() {
     yaConsumio = true;
     quedan--;
     if (enMano.tipo === 'fernet') {
       borrachera.tomarTrago(1 / TRAGOS_POR_FERNET);
+    } else {
+      borrachera.comer();
     }
   }
 
@@ -518,6 +523,7 @@ export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
       if (termino) {
         terminarGesto();
         if (quedan === 0) {
+          alTerminar(enMano.tipo);
           vaciarMano(); // se terminó
         }
       }

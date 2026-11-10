@@ -15,8 +15,19 @@ import * as THREE from 'three';
 //    otras dos están a más de 95 m: no se escuchan.
 //  - en el centro del predio los tres parlantes están a unos 74 m: las tres bandas
 //    suenan al 13 %, bajito, de fondo.
+// Son los valores de los escenarios grandes. La carpa usa otros (ver carpa.js): se pasan
+// al crear la música.
 const DISTANCIA_VOLUMEN_COMPLETO = 20; // metros
 const DISTANCIA_SILENCIO = 78; // metros
+
+// --- Sonido amortiguado (ver amortiguar) ---
+// Del otro lado de una lona (la de la carpa) se escuchan sobre todo los graves: el sonido
+// pasa por un filtro "pasa bajos", que deja pasar los sonidos graves y corta los agudos.
+// Hasta qué frecuencia deja pasar (en Hz): normal (deja pasar todo lo que oímos) y apagado.
+const FRECUENCIA_NORMAL = 22000;
+const FRECUENCIA_AMORTIGUADA = 450;
+const SEGUNDOS_AMORTIGUAR = 0.25; // lo que tarda en cambiar (más o menos) al entrar o salir
+const VOLUMEN_AMORTIGUADO = 0.45; // además de sonar "apagado", suena más bajo (45 %)
 
 // Vite sirve la carpeta public/audio en la dirección /audio
 const CARPETA_AUDIO = '/audio/';
@@ -41,16 +52,15 @@ const SIN_TEMA = { archivo: null, titulo: '', conocido: false };
  * Por ejemplo: t = 0.25 → 94 %,  t = 0.5 → 75 %,  t = 0.75 → 44 %,  t = 1 → 0 %.
  * (En línea recta, como antes, t = 0.25 ya daba 75 %.)
  */
-function volumenSegunDistancia(distancia) {
-  if (distancia <= DISTANCIA_VOLUMEN_COMPLETO) {
+function volumenSegunDistancia(distancia, completo, silencio) {
+  if (distancia <= completo) {
     return 1;
   }
-  if (distancia >= DISTANCIA_SILENCIO) {
+  if (distancia >= silencio) {
     return 0;
   }
   // t: qué parte del camino entre "volumen completo" y "silencio" ya recorrimos (0 a 1).
-  const t =
-    (distancia - DISTANCIA_VOLUMEN_COMPLETO) / (DISTANCIA_SILENCIO - DISTANCIA_VOLUMEN_COMPLETO);
+  const t = (distancia - completo) / (silencio - completo);
   return 1 - t * t;
 }
 
@@ -60,15 +70,21 @@ function volumenSegunDistancia(distancia) {
  * Arranca en silencio: suena recién cuando alguien llama a tocarSet().
  *
  * @param {THREE.AudioListener} oyente  Los "oídos" del jugador (van pegados a la cámara)
+ * @param {{completo: number, silencio: number}} [distancias]  Hasta dónde suena al 100 % y
+ *        desde dónde ya no se escucha (en metros). Si no se pasan, las de los escenarios grandes.
  * @returns {{ sonido: THREE.PositionalAudio, tocarSet: (temas, repetir) => void,
  *             pausar: () => void, reanudar: () => void, temaActual: () => object,
  *             hayShow: () => boolean, faltaAudio: () => boolean,
  *             actualizarVolumen: (posicionJugador: THREE.Vector3) => void, volumen: () => number,
  *             estaSonando: () => boolean, graves: () => number,
  *             alTerminarTema: (funcion: (tema) => void) => void,
- *             segundosDelTema: () => number, numeroDeTema: () => number }}
+ *             segundosDelTema: () => number, numeroDeTema: () => number,
+ *             amortiguar: (amortiguado: boolean) => void }}
  */
-export function crearMusica(oyente) {
+export function crearMusica(
+  oyente,
+  distancias = { completo: DISTANCIA_VOLUMEN_COMPLETO, silencio: DISTANCIA_SILENCIO }
+) {
   // PositionalAudio es un sonido con posición en el mundo 3D: se agrega al escenario
   // como cualquier otro objeto. Por defecto usa el modelo 'HRTF', que simula cómo llega
   // el sonido a cada oído, y así se nota de qué lado viene.
@@ -103,6 +119,31 @@ export function crearMusica(oyente) {
   // los golpes se notan más rápido.
   analizador.smoothingTimeConstant = 0.5;
   sonido.source.connect(analizador);
+
+  // --- Filtro para amortiguar el sonido (ver amortiguar) ---
+  // Va entre el mp3 y el "parlante" 3D. El analizador está conectado antes, así que el
+  // público sigue saltando igual aunque el jugador lo escuche apagado.
+  const filtro = sonido.context.createBiquadFilter();
+  filtro.type = 'lowpass';
+  filtro.frequency.value = FRECUENCIA_NORMAL;
+  sonido.setFilter(filtro);
+  let amortiguado = false;
+
+  /**
+   * Apaga el sonido como si llegara a través de una lona (true) o lo deja normal (false).
+   * Lo usa main.js con la carpa: desde afuera la carpa se escucha apagada, y desde adentro,
+   * los escenarios grandes.
+   * @param {boolean} valor
+   */
+  function amortiguar(valor) {
+    if (valor === amortiguado) {
+      return; // no cambió nada
+    }
+    amortiguado = valor;
+    // setTargetAtTime cambia la frecuencia de a poco (no de golpe, que haría un "clic").
+    const frecuencia = valor ? FRECUENCIA_AMORTIGUADA : FRECUENCIA_NORMAL;
+    filtro.frequency.setTargetAtTime(frecuencia, sonido.context.currentTime, SEGUNDOS_AMORTIGUAR / 3);
+  }
 
   // Lista donde el analizador nos deja la energía de cada franja (de 0 a 255).
   const datosFrecuencias = new Uint8Array(analizador.frequencyBinCount);
@@ -319,7 +360,10 @@ export function crearMusica(oyente) {
     // getWorldPosition nos da la posición del parlante en coordenadas del predio.
     sonido.getWorldPosition(posicionParlante);
     const distancia = posicionJugador.distanceTo(posicionParlante);
-    volumenActual = volumenSegunDistancia(distancia);
+    volumenActual = volumenSegunDistancia(distancia, distancias.completo, distancias.silencio);
+    if (amortiguado) {
+      volumenActual *= VOLUMEN_AMORTIGUADO; // con una lona en el medio llega menos sonido
+    }
     sonido.setVolume(volumenActual);
   }
 
@@ -331,6 +375,6 @@ export function crearMusica(oyente) {
   return {
     sonido, tocarSet, cortarSet, pasarTema, pausar, reanudar, temaActual, actualizarVolumen, volumen, estaSonando, graves,
     alTerminarTema, hayShow, faltaAudio,
-    segundosDelTema, numeroDeTema,
+    segundosDelTema, numeroDeTema, amortiguar,
   };
 }

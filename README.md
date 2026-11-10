@@ -8,11 +8,11 @@ Arriba de cada escenario toca la banda, con show de luces, pantalla en vivo y fu
 
 Los pogos se arman como en un recital: unos segundos antes de que explote un tema conocido, dos rockeros empiezan a abrir la ronda; cuando explota, salta todo el público, vuelan papelitos desde la tarima y la ronda se llena de gente chocándose. Si el jugador se queda adentro, lo lleva puesto.
 
-Los fernets emborrachan: los colores y las luces se ponen más intensos y laten con la música, la vista se marea y el jugador contagia más al público. Con unos 5 fernets se desmaya y se despierta a la mañana siguiente, con el festival terminado y la gente limpiando el predio.
+Los fernets emborrachan: los colores y las luces se ponen más intensos y laten con la música, la vista se marea y el jugador contagia más al público. El choripán ayuda: cada mordisco baja un poco la borrachera (un choripán entero equivale a un fernet y medio menos). Con unos 5 fernets se desmaya y se despierta a la mañana siguiente, con el festival terminado y la gente limpiando el predio. Cuando el que barre termina de hablarle, aparece el **resumen de la noche**: qué bandas vio, cuánto cantó y cuánto pogo hizo, cuántas veces lo saludó la banda, los bises que consiguió, las fotos, los fernets y choripanes, y qué pasó con el celular. Se cierra con Enter.
 
-Con la tecla X el jugador saca el celular y, con clic, saca fotos (verticales, con la banda y la hora); con la Z las ve en una galería. Pero ojo: si tiene el celular mucho tiempo afuera, sobre todo entre el público, en el pogo, borracho o de noche, aparece un ladrón con capucha que se le acerca por detrás. Si lo guarda a tiempo, el ladrón se va; si no, se lo roba y se pierden todas las fotos.
+Con la tecla X el jugador saca el celular y, con clic, saca fotos (verticales, con la banda y la hora); con la Z las ve en una galería. Pero ojo: si tiene el celular mucho tiempo afuera, sobre todo entre el público, en el pogo, borracho o de noche, aparece un ladrón con capucha que se le acerca por detrás. Si lo guarda a tiempo, el ladrón se va; si no, se lo roba y sale corriendo, con una marca roja arriba de la cabeza. Ahí empieza la persecución: corre un poco más lento que el jugador con Shift, pero zigzaguea entre la gente. Si lo alcanzás, recuperás el celular y las fotos; si te sacó más de 22 m de ventaja o pasan 12 segundos, se pierde entre la gente y te quedás sin celular y sin fotos.
 
-Arriba a la izquierda hay un reloj con la hora del festival, y con la tecla G se abre la grilla con los horarios de cada escenario. El festival arranca a las 17:58 y el reloj corre 10 veces más rápido que el tiempo real (las 3 horas de la tarde duran 18 minutos de juego). En cada escenario tocan tres bandas, una después de la otra: cada una sube cuando llega su horario, toca un tema tranqui y uno para el pogo, y se baja. Entre banda y banda el cartel anuncia a la que sigue. A las 21:00, ya de noche, suben las bandas principales, que tocan sin parar. Cada banda tiene su look arriba del escenario, el nombre en el bombo, los trapos de sus fans en la valla y, las uruguayas, banderas de Uruguay en el público.
+Arriba a la izquierda hay un reloj con la hora del festival, y con la tecla G se abre la grilla con los horarios de cada escenario. El festival arranca a las 17:58 y el reloj corre 10 veces más rápido que el tiempo real (las 3 horas de la tarde duran 18 minutos de juego). En cada escenario tocan tres bandas, una después de la otra: cada una sube cuando llega su horario, toca un tema tranqui y uno para el pogo, y se baja. Cuando una banda de la tarde termina su último tema, se baja y el público pide **"¡otra, otra!"** durante unos 12 segundos. Si el jugador está cerca y la pide cantando (Q) o con los brazos arriba (E) unos 3 segundos, la banda vuelve y toca de nuevo su tema conocido: el bis (con pogo incluido). Si no, se va. Entre banda y banda el cartel anuncia a la que sigue. A las 21:00, ya de noche, suben las bandas principales, que tocan sin parar. Cada banda tiene su look arriba del escenario, el nombre en el bombo, los trapos de sus fans en la valla y, las uruguayas, banderas de Uruguay en el público.
 
 Programación:
 
@@ -23,6 +23,14 @@ Programación:
 | Noche | **Ciro y los Persas** (21:00) | **Las Pastillas del Abuelo** (21:10) | **Andrés Calamaro** (21:20) |
 
 En el show de Callejeros no hay fuegos artificiales, por respeto a las víctimas de Cromañón.
+
+Además de los tres escenarios hay **La Carpita** (nombre provisorio, se cambia en `NOMBRE_CARPA` de `src/carpa.js`): una carpa de lona a rayas en la esquina entre el Escenario Rojo y el Ámbar, como la Casita del Blues del Cosquín Rock. Adentro hay un escenario chico con alfombra, telón, velador y amplificadores, guirnaldas de lamparitas que laten con la música, una bola de espejos que gira más rápido con los temas conocidos y fardos de paja para sentarse. El público es más chico pero más apretado. Desde afuera la música de la carpa se escucha apagada, y desde adentro, la de los escenarios grandes (como detrás de una lona). Arriba de la entrada, una marquesina con lamparitas anuncia quién toca.
+
+| Hora | La Carpita |
+|---|---|
+| 18:30 | Lean Dotta (cuarteto, con tecladista y bajista) |
+| 19:55 | Pepi Gabrielli (voz) y Manu Viale (guitarra) |
+| 21:15 | **Colo Giub** (guitarra y voz), cierra la noche |
 
 ## Tecnología
 
@@ -66,6 +74,12 @@ Los archivos mp3 **no están en el repositorio**: la carpeta `public/audio` est�
 | Andrés Calamaro | `calamaro_conocido_sindocumentos.mp3` | Sin documentos |
 | Andrés Calamaro | `calamaro_medio_todaviaunacanciondeamor.mp3` | Todavía una canción de amor |
 | Andrés Calamaro | `calamaro_tranqui_buenasuerteyhastaluego.mp3` | Buena suerte y hasta luego |
+| Lean Dotta (carpa) | `leandotta_tranqui_comoeranlascosas.mp3` | Cómo eran las cosas |
+| Lean Dotta (carpa) | `leandotta_conocido_superestrella.mp3` | Superestrella (versión cuarteto) |
+| Pepi y Manu (carpa) | `mv_tranqui_tema1.mp3` | A definir |
+| Pepi y Manu (carpa) | `mv_conocido_tema2.mp3` | A definir |
+| Colo Giub (carpa) | `colo_tranqui_senorita.mp3` | Señorita (Ricardo Arjona) |
+| Colo Giub (carpa) | `colo_conocido_doctoraii.mp3` | Doctora II (Piti Fernández) |
 La carpeta tiene que quedar así:
 
 ```
@@ -113,6 +127,8 @@ public/
 | X | Sacar / guardar el celular (con la mano libre) |
 | Clic (con el celular afuera) | Sacar una foto |
 | Z | Abrir / cerrar la galería de fotos (← → para cambiar de foto) |
+| Q o E (cuando el público pide "¡otra, otra!") | Pedir el bis |
+| Enter | Cerrar el resumen de la noche |
 | Esc o P | Pausa (se detiene la música y el público se congela) |
 | M | Silenciar / activar el sonido |
 | Clic | Entrar al juego / continuar después de la pausa |
@@ -120,14 +136,16 @@ public/
 ## Estructura del código
 
 - `index.html`: página, cartel de inicio/pausa e indicadores en pantalla.
-- `src/main.js`: arma la escena, los tres escenarios con su programación (bandas, horarios y temas) y las teclas de pausa y silencio.
-- `src/escenario.js`: construcción de cada escenario y su programación (qué banda sube y cuándo).
+- `src/main.js`: arma la escena, los tres escenarios y la carpa con su programación (bandas, horarios y temas) y las teclas de pausa y silencio.
+- `src/carpa.js`: la carpa (escenario chico e íntimo), con sus luces, su decoración y su público.
+- `src/escenario.js`: construcción de cada escenario y su programación (qué banda sube y cuándo, y el bis).
+- `src/bis.js`: el "¡otra, otra!" del público y el jugador pidiendo el bis.
 - `src/musica.js`: reproducción del set de cada banda con sonido posicional.
 - `src/publico.js`: el público frente a cada escenario y su reacción a la música.
 - `src/ronda.js`: las rondas de pogo: los rockeros que las abren antes del boom del tema y el pogo cuando explota.
 - `src/jugador.js`: control en primera persona y colisiones.
 - `src/acciones.js`: acciones del recital (brazos en primera persona, salto, cantar y pogo) y su contagio al público.
-- `src/artistas.js`: los músicos de las nueve bandas, cada uno con su look y sus instrumentos.
+- `src/artistas.js`: los músicos de las nueve bandas y de la carpa, cada uno con su look y sus instrumentos.
 - `src/luces.js`: show de luces de cada escenario, al ritmo de la música.
 - `src/pantalla.js`: pantalla en vivo que filma a la banda.
 - `src/fuegos.js`: fuegos artificiales al terminar los temas conocidos.
@@ -135,9 +153,10 @@ public/
 - `src/aplausos.js`: aplausos y gritos sintetizados al terminar cada tema.
 - `src/cielo.js`: cielo del atardecer a la noche (sigue la hora del reloj), con sol y estrellas.
 - `src/predio.js`: piso del predio (pasto, tierra pisada y caminos) y guirnaldas de banderines.
-- `src/barra.js`: barra de fernet y choripán.
+- `src/barra.js`: barra de fernet y choripán (el choripán baja la borrachera).
 - `src/borrachera.js`: lo que le pasa al jugador con los fernets (efectos en la imagen, la cámara y el sonido, euforia) y el desmayo.
 - `src/limpieza.js`: la gente que limpia el predio y la basura, a la mañana siguiente del desmayo.
+- `src/resumen.js`: anota lo que hace el jugador durante la noche y muestra el resumen a la mañana siguiente.
 - `src/aguante.js`: el aguante-metro.
 - `src/grilla.js`: reloj del festival y grilla de horarios.
 - `src/chica.js`: la chica que pide subirse a los hombros durante los temas tranquis.

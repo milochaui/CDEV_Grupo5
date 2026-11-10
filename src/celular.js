@@ -5,7 +5,8 @@
 // Con el celular afuera, cada clic saca una foto: flash, ruido de obturador y la foto
 // aparece un momento en la pantalla del celular. Las fotos quedan guardadas en una lista
 // (mientras no se recargue la página).
-// Si te lo roban (ver robo.js), te quedás sin celular y sin fotos.
+// Si te lo roban (ver robo.js), te quedás sin celular y sin fotos... salvo que alcances
+// al ladrón corriendo: ahí recuperás las dos cosas.
 import * as THREE from 'three';
 import { piezaEnMano } from './barra.js';
 
@@ -184,12 +185,13 @@ export function crearCelularDelCuerpo() {
  *             camaraParaFoto: () => THREE.PerspectiveCamera | null,
  *             guardarFoto: (lienzo: HTMLCanvasElement) => void,
  *             fotos: () => Array<{imagen: string, descripcion: string}>, estaAfuera: () => boolean,
- *             robar: () => void, estaRobado: () => boolean }}
+ *             robar: () => void, recuperar: () => void, estaRobado: () => boolean }}
  *  - soltar: lo guarda de golpe, sin animación (al desmayarse).
  *  - camaraParaFoto y guardarFoto: para sacar la foto (ver el bucle de animación en main.js).
  *  - fotos: la lista de fotos, de la más vieja a la más nueva (la usa galeria.js).
  *  - estaAfuera: si el jugador tiene el celular afuera (lo usa robo.js).
  *  - robar: se lo sacan de la mano (lo llama robo.js). estaRobado: si ya se lo robaron.
+ *  - recuperar: alcanzaste al ladrón y te lo devuelve, con las fotos (lo llama robo.js).
  */
 export function crearCelular({ acciones, jugador, camara, oyente, describirFoto }) {
   const aviso = document.getElementById('aviso-celular');
@@ -214,6 +216,8 @@ export function crearCelular({ acciones, jugador, camara, oyente, describirFoto 
   // Las fotos: cada una es { imagen, descripcion }. imagen es la foto en formato de texto
   // ("data URL"), que se puede poner directo en un <img>.
   const fotos = [];
+  // Las fotos que se llevó el ladrón: si lo alcanzás, vuelven (ver recuperar).
+  let fotosDelLadron = [];
 
   let afuera = false; // si el jugador quiere tenerlo afuera (lo cambia la tecla X)
   let subido = 0; // 0 = guardado, 1 = en alto. Va cambiando de a poco
@@ -322,7 +326,15 @@ export function crearCelular({ acciones, jugador, camara, oyente, describirFoto 
   function robar() {
     soltar();
     robado = true;
+    fotosDelLadron = fotos.slice(); // slice() sin nada: una copia de toda la lista
     fotos.length = 0; // vacía la lista
+  }
+
+  // Alcanzaste al ladrón: te devuelve el celular (queda guardado) con todas las fotos.
+  function recuperar() {
+    robado = false;
+    fotos.push(...fotosDelLadron); // los "..." agregan las fotos de a una
+    fotosDelLadron = [];
   }
 
   // Lo guarda de golpe, sin animación.
@@ -373,7 +385,7 @@ export function crearCelular({ acciones, jugador, camara, oyente, describirFoto 
   }
 
   return {
-    actualizar, soltar, camaraParaFoto, guardarFoto, robar,
+    actualizar, soltar, camaraParaFoto, guardarFoto, robar, recuperar,
     fotos: () => fotos,
     estaAfuera: () => afuera,
     estaRobado: () => robado,

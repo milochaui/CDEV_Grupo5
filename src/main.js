@@ -1,5 +1,5 @@
 // Punto de entrada del simulador.
-// Arma la escena: predio, cielo (del atardecer a la noche), iluminación, cámara y los tres escenarios.
+// Arma la escena: predio, cielo (del atardecer a la noche), iluminación, cámara, los tres escenarios y la carpa.
 import * as THREE from 'three';
 // Postprocesado: efectos que se aplican a la imagen ya dibujada (ver "Bloom" más abajo).
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -7,6 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { crearEscenario } from './escenario.js';
+import { crearCarpa } from './carpa.js';
 import { crearJugador } from './jugador.js';
 import { crearAcciones } from './acciones.js';
 import { crearCielo } from './cielo.js';
@@ -24,6 +25,8 @@ import { crearTerceraPersona } from './terceraPersona.js';
 import { crearCelular } from './celular.js';
 import { crearGaleria } from './galeria.js';
 import { crearRobo } from './robo.js';
+import { crearResumen } from './resumen.js';
+import { crearBis } from './bis.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -302,6 +305,54 @@ const escenarios = [
   }),
 ];
 
+// --- La carpa: un escenario chico e íntimo, para artistas más de nicho (ver carpa.js) ---
+// En la esquina entre el Escenario Rojo y el Ámbar, con la entrada mirando al centro.
+// Se suma a la lista de escenarios: así tiene grilla, aguante, chica, robo, etc., como los demás.
+// Lean Dotta, Pepi y Manu, y el Colo no tienen booms: no se arma la ronda de pogo grande.
+const POSICION_CARPA = { x: -82, z: -62 };
+const carpa = crearCarpa({
+  posicion: POSICION_CARPA,
+  mirarHacia: CENTRO_PREDIO,
+  oyente: oyente,
+  lineup: [
+    {
+      banda: 'leandotta',
+      nombre: 'Lean Dotta',
+      inicio: '18:30',
+      fin: '19:40',
+      temas: [
+        { archivo: 'leandotta_tranqui_comoeranlascosas.mp3', titulo: 'Cómo eran las cosas', conocido: false },
+        { archivo: 'leandotta_conocido_superestrella.mp3', titulo: 'Superestrella (versión cuarteto)', conocido: true },
+      ],
+      trapos: ['LEAN DOTTA', 'CUARTETO PA TODOS', 'SUPERESTRELLA'],
+    },
+    {
+      banda: 'mv',
+      nombre: 'Pepi Gabrielli y Manu Viale',
+      inicio: '19:55',
+      fin: '21:05',
+      // Los temas todavía no están definidos: cuando estén, se cambian el título y el archivo.
+      temas: [
+        { archivo: 'mv_tranqui_tema1.mp3', titulo: 'Tema 1 (a definir)', conocido: false },
+        { archivo: 'mv_conocido_tema2.mp3', titulo: 'Tema 2 (a definir)', conocido: true },
+      ],
+      trapos: ['PEPI Y MANU', 'SUFRIR TAMBIÉN ES ROCK', 'AGUANTE EL MULLET', 'MV'],
+    },
+    {
+      banda: 'colo',
+      nombre: 'Colo Giub',
+      inicio: '21:15',
+      fin: '23:15',
+      temas: [
+        { archivo: 'colo_tranqui_senorita.mp3', titulo: 'Señorita (Ricardo Arjona)', conocido: false },
+        { archivo: 'colo_conocido_doctoraii.mp3', titulo: 'Doctora II (Piti Fernández)', conocido: true },
+      ],
+      trapos: ['COLO GIUB', 'COLORADO PRESENTE', 'DOCTORA II', 'FUERZA COLO'],
+    },
+  ],
+});
+escenarios.push(carpa);
+
 for (const escenario of escenarios) {
   escena.add(escenario);
 }
@@ -317,8 +368,12 @@ escena.add(barra.grupo);
 // Pasto con tierra pisada delante de cada escenario y caminos al centro (ver predio.js).
 const piso = crearPiso({
   tamano: TAMANO_PREDIO,
-  escenarios: escenarios.map((escenario) => ({ x: escenario.position.x, z: escenario.position.z })),
+  // (La carpa no: adentro tiene su piso de madera. Solo le hacemos el camino.)
+  escenarios: escenarios
+    .filter((escenario) => escenario !== carpa)
+    .map((escenario) => ({ x: escenario.position.x, z: escenario.position.z })),
   barra: POSICION_BARRA,
+  otrosDestinos: [POSICION_CARPA],
   // La anisotropía hace que el dibujo del piso no se vea borroso cuando lo miramos de costado.
   anisotropia: renderer.capabilities.getMaxAnisotropy(),
 });
@@ -335,7 +390,7 @@ const genteDelMedio = crearGenteDelMedio({ obstaculos: banderines.colisiones });
 escena.add(genteDelMedio.grupo);
 
 // --- Jugador ---
-// Le pasamos las zonas sólidas de los tres escenarios, de la barra, de los postes de
+// Le pasamos las zonas sólidas de los escenarios (y de la carpa), de la barra, de los postes de
 // los banderines y de las columnas del portal, y el borde del predio (las vallas y
 // el pasillo de la entrada).
 // flatMap junta las listas de colisiones de cada escenario en una sola lista;
@@ -373,7 +428,11 @@ const acciones = crearAcciones({ camara, jugador, escenarios, borrachera });
 const aguante = crearAguanteMetro({ acciones, escenarioMasFuerte, borrachera });
 
 // --- Pedidos en la barra (fernet y choripán en la mano) ---
-const pedidos = crearPedidos({ barra, acciones, jugador, camara, borrachera });
+// Cada fernet o choripán que termina lo anotamos en el resumen de la noche (más abajo).
+const pedidos = crearPedidos({
+  barra, acciones, jugador, camara, borrachera,
+  alTerminar: (tipo) => resumen.anotar(tipo === 'fernet' ? 'fernets' : 'choris'),
+});
 
 // --- Celular (tecla X): lo saca o lo guarda, con la mano libre. Con clic saca fotos ---
 // Abajo de cada foto va la banda que más se escucha y la hora del festival.
@@ -400,6 +459,12 @@ const robo = crearRobo({
   alRobar: () => galeria.cerrar(),
 });
 
+// --- Resumen de la noche (se muestra a la mañana siguiente, ver alDespertar) ---
+const resumen = crearResumen({ jugador, acciones, celular, aguante, escenarios, escenarioMasFuerte });
+
+// --- El bis: al terminar una banda, el público pide otra más (ver bis.js) ---
+const bis = crearBis({ escenarios, acciones, jugador, alConseguir: () => resumen.anotar('bises') });
+
 // --- Vista en tercera persona (tecla V) ---
 // El cuerpo del jugador y una cámara que lo filma desde atrás.
 const terceraPersona = crearTerceraPersona({ escena, camara, jugador, acciones });
@@ -409,7 +474,8 @@ const terceraPersona = crearTerceraPersona({ escena, camara, jugador, acciones }
 const chica = crearChica({ escena, camara, jugador, escenarios, hombros: terceraPersona.hombros });
 
 // --- La gente que limpia el predio a la mañana siguiente (arranca escondida) ---
-const limpieza = crearLimpieza({ escenarios, jugador, camara });
+// (Limpian donde estaba el público de los escenarios grandes; la carpa no.)
+const limpieza = crearLimpieza({ escenarios: escenarios.filter((escenario) => escenario !== carpa), jugador, camara });
 escena.add(limpieza.grupo);
 
 // --- El desmayo y la mañana siguiente ---
@@ -440,9 +506,9 @@ function alDormirse() {
   acciones.mirarHacia(limpieza.aparecer());
 }
 
-// Abre los ojos: le hablan.
+// Abre los ojos: le hablan. Cuando el que barre termina de hablar, aparece el resumen de la noche.
 function alDespertar() {
-  limpieza.hablar();
+  limpieza.hablar(() => resumen.mostrar());
 }
 
 // --- Pantalla de inicio, pausa y mira ---
@@ -464,7 +530,7 @@ pantallaInicio.addEventListener('click', () => {
 });
 
 // Mouse capturado: se juega. Escondemos el cartel, mostramos la mira y la música
-// de los tres escenarios sigue desde donde quedó (si no estaba tocando nadie, no pasa nada).
+// de los escenarios sigue desde donde quedó (si no estaba tocando nadie, no pasa nada).
 jugador.controles.addEventListener('lock', () => {
   pantallaInicio.style.display = 'none';
   mira.style.display = 'block';
@@ -475,7 +541,7 @@ jugador.controles.addEventListener('lock', () => {
 });
 
 // Mouse liberado (con Esc o con la tecla P): pausa. Se detiene la música de los
-// tres escenarios y vuelve el cartel, ahora como cartel de pausa.
+// escenarios y vuelve el cartel, ahora como cartel de pausa.
 // El público se congela solo: en el bucle de animación no lo movemos si hay pausa.
 jugador.controles.addEventListener('unlock', () => {
   pantallaInicio.style.display = 'flex';
@@ -603,10 +669,17 @@ function animar(tiempo) {
     robo.actualizar(delta);
     genteDelMedio.actualizar(delta);
     limpieza.actualizar(delta);
+    resumen.actualizar(delta);
+    bis.actualizar(delta);
   }
   // Volumen general de los "oídos" del jugador: 0 = mudo. Lo apaga la tecla M o el desmayo.
   oyente.setMasterVolume(silenciado ? 0 : borrachera.volumen());
+  // La lona de la carpa amortigua el sonido: adentro, los escenarios de afuera se escuchan
+  // apagados (como detrás de una pared); y afuera, la música de la carpa.
+  const adentroDeLaCarpa = carpa.userData.estaAdentro(camara.position);
   for (const escenario of escenarios) {
+    const delOtroLado = escenario === carpa ? !adentroDeLaCarpa : adentroDeLaCarpa;
+    escenario.userData.musica.amortiguar(delOtroLado);
     escenario.userData.musica.actualizarVolumen(camara.position);
     // Los aplausos bajan con la distancia igual que la música. En pausa no se escuchan.
     escenario.userData.aplausos.actualizarVolumen(enPausa ? 0 : escenario.userData.musica.volumen());
@@ -650,6 +723,7 @@ function animar(tiempo) {
     pasadaEscena.camera = camaraFoto;
     composer.render(delta);
     celular.guardarFoto(renderer.domElement);
+    resumen.anotar('fotos');
   }
 
   // Dibujamos el cuadro con la cámara de la vista elegida (primera o tercera persona).

@@ -168,14 +168,16 @@ function crearPinta(grupo) {
  * @param {Array<object>} opciones.personas  La gente del público (ver publico.js)
  * @param {object} opciones.musica  La música del escenario (ver musica.js)
  * @param {THREE.Group} opciones.grupo  El grupo del público
+ * @param {Array<{x: number, z: number, radio: number}>} [opciones.lugares]  Dónde se arman
+ *        las rondas. Si no se pasa, las de los escenarios grandes (RONDAS). La carpa tiene una sola.
  * @returns {{ actualizar: (delta: number) => void, rockeros: Array<object>,
  *             hayBoom: () => boolean, fase: () => string,
  *             faseCerca: (x: number, z: number, margen: number) => string | null }}
  */
-export function crearRondas({ personas, musica, grupo }) {
+export function crearRondas({ personas, musica, grupo, lugares = RONDAS }) {
   // --- Quién está en cada ronda (se decide una sola vez) ---
   const enElPiso = personas.filter((persona) => persona.base === null);
-  const rondas = RONDAS.map((datos) => ({ ...datos, miembros: [], pogueros: [], rockeros: [] }));
+  const rondas = lugares.map((datos) => ({ ...datos, miembros: [], pogueros: [], rockeros: [] }));
   const todosLosRockeros = [];
 
   function distanciaAlCentro(persona, ronda) {

@@ -24,6 +24,21 @@ const SEPARACION_MINIMA = 0.5; // dos personas nunca quedan más cerca que esto 
 const PERSONAS_EN_HOMBROS = 6; // de las 200, cuántas van subidas a los hombros de otra
 const BANDERAS_POR_ESCENARIO = 8; // cuántas personas ondean una bandera
 
+// La "forma" del público de los escenarios grandes: todo lo de arriba junto.
+// La carpa tiene otra forma, más chica y apretada (ver carpa.js).
+// rondas: dónde se arman las rondas de pogo (undefined = las de siempre, ver ronda.js).
+const FORMA_ESCENARIO = {
+  cantidad: PERSONAS_POR_ESCENARIO,
+  distanciaValla: DISTANCIA_VALLA,
+  profundidad: PROFUNDIDAD_PUBLICO,
+  anchoAdelante: ANCHO_ADELANTE,
+  anchoAtras: ANCHO_ATRAS,
+  separacion: SEPARACION_MINIMA,
+  enHombros: PERSONAS_EN_HOMBROS,
+  banderas: BANDERAS_POR_ESCENARIO,
+  rondas: undefined,
+};
+
 // --- Reacción según el tema (valores de "tranquilos" y de "euforia") ---
 const SEGUNDOS_TRANSICION = 4; // lo que tarda en pasar de tranquilos a euforia (o al revés)
 const PROPORCION_SALTAN_TRANQUI = 0.1; // 10 % de la gente salta
@@ -367,12 +382,14 @@ function alAzar(lista) {
  *
  * @param {object} musica  La música del escenario (ver crearMusica en musica.js)
  * @param {object} aplausos  Los aplausos del escenario (ver crearAplausos en aplausos.js)
+ * @param {object} [forma]  Cuánta gente y dónde (ver FORMA_ESCENARIO). Si no se pasa, la
+ *        de los escenarios grandes.
  * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void,
  *             contagiar: Function, contarPersonasCerca: Function,
  *             cambiarBanderas: (nombres?: string[]) => void,
  *             faseRondaCerca: (posicionMundo: THREE.Vector3, margen: number) => string | null }}
  */
-export function crearPublico(musica, aplausos) {
+export function crearPublico(musica, aplausos, forma = FORMA_ESCENARIO) {
   const grupo = new THREE.Group();
 
   // --- Las 8 InstancedMesh ---
@@ -381,7 +398,7 @@ export function crearPublico(musica, aplausos) {
   // piernas de los que van sentados en hombros) dibujamos a todo el público.
   // Mucho más rápido que 1600 Mesh sueltas.
   function crearPieza(geometria, material = materialPersona) {
-    const pieza = new THREE.InstancedMesh(geometria, material, PERSONAS_POR_ESCENARIO);
+    const pieza = new THREE.InstancedMesh(geometria, material, forma.cantidad);
     // Le avisamos que las posiciones van a cambiar en cada cuadro.
     pieza.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // Three.js no dibuja lo que queda fuera de la vista, pero para una InstancedMesh
@@ -406,7 +423,7 @@ export function crearPublico(musica, aplausos) {
 
   // Estampados de las remeras de bandas (ver remeras.js). En el muñeco, el pecho queda
   // a 1.05 m de los pies: en el medio del torso, también en los que van sentados.
-  const remeras = crearRemeras(grupo, PERSONAS_POR_ESCENARIO, 1.05);
+  const remeras = crearRemeras(grupo, forma.cantidad, 1.05);
 
   // --- Repartimos a la gente ---
   const personas = [];
@@ -475,24 +492,24 @@ export function crearPublico(musica, aplausos) {
   }
 
   // Primero la gente parada en el piso: todos menos los que van a ir en hombros.
-  const personasEnElPiso = PERSONAS_POR_ESCENARIO - PERSONAS_EN_HOMBROS;
+  const personasEnElPiso = forma.cantidad - forma.enHombros;
   let intentos = 0;
-  while (personas.length < personasEnElPiso && intentos < PERSONAS_POR_ESCENARIO * 50) {
+  while (personas.length < personasEnElPiso && intentos < forma.cantidad * 50) {
     intentos++;
 
     // Distancia a la valla: profundidad × (azar al cuadrado).
     // Al elevar al cuadrado un número entre 0 y 1 se achica (0.5² = 0.25), así que salen
     // muchas distancias chicas: la gente se amontona adelante y queda dispersa al fondo.
     const azar = Math.random();
-    const distancia = PROFUNDIDAD_PUBLICO * azar * azar;
+    const distancia = forma.profundidad * azar * azar;
     // La zona se ensancha hacia atrás, como un abanico.
-    const ancho = mezclar(ANCHO_ADELANTE, ANCHO_ATRAS, distancia / PROFUNDIDAD_PUBLICO);
+    const ancho = mezclar(forma.anchoAdelante, forma.anchoAtras, distancia / forma.profundidad);
     const x = (Math.random() - 0.5) * ancho;
-    const z = DISTANCIA_VALLA + distancia;
+    const z = forma.distanciaValla + distancia;
 
     // Si quedó encima de alguien, probamos otro lugar.
     const encimado = personas.some(
-      (otra) => Math.hypot(otra.x - x, otra.z - z) < SEPARACION_MINIMA
+      (otra) => Math.hypot(otra.x - x, otra.z - z) < forma.separacion
     );
     if (encimado) {
       continue;
@@ -504,7 +521,7 @@ export function crearPublico(musica, aplausos) {
   // al final de la lista: así, en cada cuadro, primero se mueve el que carga y después
   // el de arriba, que necesita saber dónde quedaron los hombros del de abajo.
   const cantidadEnElPiso = personas.length;
-  for (let i = 0; i < PERSONAS_EN_HOMBROS; i++) {
+  for (let i = 0; i < forma.enHombros; i++) {
     const base = personas[Math.floor(Math.random() * cantidadEnElPiso)];
     if (base.hombros !== null) {
       continue; // ya carga a alguien: esta vez no sumamos a nadie
@@ -519,7 +536,7 @@ export function crearPublico(musica, aplausos) {
 
   // Por último, las banderas: se las damos a gente al azar (también a los de arriba,
   // pero no a los que cargan a alguien, que tienen las manos ocupadas).
-  for (let i = 0; i < BANDERAS_POR_ESCENARIO; i++) {
+  for (let i = 0; i < forma.banderas; i++) {
     const persona = alAzar(personas);
     if (persona.hombros !== null || persona.bandera !== null) {
       continue;
@@ -530,7 +547,7 @@ export function crearPublico(musica, aplausos) {
 
   // Las rondas de pogo, con sus rockeros: van en cuero, así que les pintamos el cuerpo del
   // color de la piel (ver crearPinta en ronda.js).
-  const rondas = crearRondas({ personas, musica, grupo });
+  const rondas = crearRondas({ personas, musica, grupo, lugares: forma.rondas });
   for (const rockero of rondas.rockeros) {
     color.setHex(rockero.colorPiel);
     cuerpos.setColorAt(personas.indexOf(rockero), color);

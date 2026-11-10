@@ -18,6 +18,12 @@
 //    (trompeta, trombón y saxo).
 //  - La Vela Puerca: los dos cantantes saltando juntos adelante (el Enano con gorro y
 //    barba, el Cebolla con la celeste), con trompeta y saxo.
+// Los de la carpa (ver carpa.js), más chicos y sin batería:
+//  - Lean Dotta: cuarteto. Camisa brillante, micrófono en mano y el pasito cuartetero,
+//    con el tecladista (el "tunga-tunga") y el bajista.
+//  - Pepi Gabrielli y Manu Viale: Pepi, grandote y con rulos, canta; Manu, de estatura
+//    media y con mullet, toca la guitarra sufriendo cada nota.
+//  - Colo Giub: pelo colorado, guitarra criolla y voz, solo en el escenario.
 //
 // Qué banda se ve lo decide la programación de cada escenario (ver escenario.js).
 // Los músicos se mueven con los graves del tema, y algunos cambian según el tema sea
@@ -78,6 +84,11 @@ const AMARILLO = 0xf2c300;
 const VERDE = 0x1f8a3a;
 const CELESTE_URUGUAY = 0x7bb6e8; // la camiseta de la selección uruguaya
 const PELO_CASTANO_CLARO = 0x6b4a2a;
+// Los de la carpa
+const PIEL_MUY_CLARA = 0xefc8b2; // la del Colo
+const PELO_COLORADO = 0xb5441b;
+const PELO_RULOS = 0x3a2416; // los rulos de Pepi
+const CAMISA_LENIADORA = 0x5a1c1c; // la camisa abierta de Manu (bordó oscuro)
 
 // Guardamos un material por color y lo reusamos en todas las piezas de ese color:
 // así el navegador tiene menos trabajo.
@@ -97,6 +108,8 @@ const MATERIAL_LENTES = new THREE.MeshStandardMaterial({ color: 0x050505, roughn
 const MATERIAL_CUERO = new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.35, metalness: 0.1 });
 // Lentes naranjas: brillan un poco solos (emissive), como si les pegaran las luces del escenario.
 const MATERIAL_LENTES_NARANJA = new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0x662200, roughness: 0.15 });
+// Lentejuelas plateadas (la camisa de Lean Dotta): metálica y lisa, brilla con las luces.
+const MATERIAL_LENTEJUELAS = new THREE.MeshStandardMaterial({ color: 0xa8a8bc, metalness: 0.5, roughness: 0.4 });
 
 // ---------------------------------------------------------------------------
 // Ayudas para armar piezas
@@ -1120,6 +1133,138 @@ function crearCebolla() {
   return crearCantanteSaltarin(persona, persona.izq, persona.der, 1.5);
 }
 
+// --- Los de la carpa ---
+
+// Rulos: un montón de bolitas sobre la cabeza, en anillos (las medidas son desde el cuello,
+// como el pelo en crearPersona). Los anillos de más abajo no dan toda la vuelta: dejan
+// la cara a la vista.
+function ponerRulos(persona, color) {
+  const geometria = new THREE.SphereGeometry(0.06, 6, 5);
+  const anillos = [
+    // [altura, radio del anillo, cuántos rulos, si da toda la vuelta]
+    [0.4, 0.05, 4, true],
+    [0.36, 0.12, 9, true],
+    [0.29, 0.155, 12, false],
+    [0.2, 0.15, 10, false],
+  ];
+  for (const [y, radio, cantidad, completo] of anillos) {
+    for (let i = 0; i < cantidad; i++) {
+      const angulo = (i / cantidad) * Math.PI * 2;
+      const x = Math.sin(angulo) * radio;
+      const z = Math.cos(angulo) * radio - 0.01;
+      if (!completo && z > 0.02) {
+        continue; // ese rulo caería sobre la cara (que mira hacia +Z)
+      }
+      pieza(persona.cabeza, geometria, color, x, y, z);
+    }
+  }
+}
+
+// Mullet: corto arriba y a los costados, largo atrás (hasta los hombros).
+function ponerMullet(persona, color) {
+  pieza(persona.cabeza, caja(0.26, 0.06, 0.27), color, 0, 0.35, -0.005); // arriba, corto
+  pieza(persona.cabeza, caja(0.27, 0.36, 0.05), color, 0, 0.13, -0.135); // atrás, largo
+  for (const lado of [-1, 1]) {
+    pieza(persona.cabeza, caja(0.03, 0.1, 0.2), color, lado * 0.135, 0.29, -0.02); // costados
+  }
+}
+
+// Lean Dotta: camisa de lentejuelas, como las estrellas del cuarteto, y el micrófono en la
+// derecha. Baila el pasito cuartetero: va de un lado al otro marcando el ritmo con la cadera,
+// con el brazo libre doblado yendo y viniendo (más grande en los temas de pogo).
+// (No encontramos fotos suyas: el look es inventado.)
+function crearLeanDotta() {
+  const grupo = new THREE.Group();
+  const persona = crearPersona({
+    piel: PIEL_MEDIA,
+    remera: MATERIAL_LENTEJUELAS,
+    mangas: MATERIAL_LENTEJUELAS,
+    pantalon: NEGRO,
+    pelo: PELO_CASTANO,
+  });
+  grupo.add(persona.grupo);
+  const apuntarMicrofono = crearMicrofonoDeMano(persona, persona.der);
+  posar(persona.der, ...POSE_MICROFONO);
+
+  const PASOS_POR_SEGUNDO = 1.1; // el cuarteto va más o menos a 130 golpes por minuto: un paso cada dos
+
+  function animar(reloj, pulso, saludo, tema) {
+    const paso = Math.sin(reloj * Math.PI * 2 * PASOS_POR_SEGUNDO); // de −1 a 1
+    const ganas = tema.conocido ? 1 : 0.5; // en los tranquis baila más suave
+    persona.grupo.position.x = paso * 0.12 * ganas; // de un lado al otro
+    persona.grupo.rotation.z = -paso * 0.07 * ganas; // la cadera
+    persona.cabeza.rotation.x = 0.05 + pulso * CABECEO;
+    // El brazo libre, doblado, va y viene con el paso.
+    const pose = [0.9 + paso * 0.35 * ganas, 0.35, 1.5];
+    saludar(persona, persona.izq, pose, reloj, saludo);
+    apuntarMicrofono();
+  }
+  return { grupo, animar };
+}
+
+// Pepi Gabrielli: grandote (más ancho y más alto que los demás) y ruludo. Canta con el
+// micrófono en la mano y el puño en alto en los temas de pogo.
+function crearPepi() {
+  const persona = crearPersona({
+    piel: PIEL_CLARA,
+    remera: 0x2f4f3a, // verde oscuro
+    pantalon: JEAN,
+  });
+  ponerRulos(persona, PELO_RULOS);
+  persona.grupo.scale.set(1.18, 1.1, 1.18); // grandote
+  return crearCantanteSaltarin(persona, persona.der, persona.izq, 0.7);
+}
+
+// Manu Viale: estatura media, mullet, remera negra con la camisa leñadora abierta encima y
+// guitarra negra. Toca sufriendo: la cabeza gacha y ladeada, con cada golpe se arquea para
+// atrás, y en los temas tranquis cada tanto levanta la cara al cielo.
+function crearManu() {
+  const grupo = new THREE.Group();
+  const persona = crearPersona({
+    piel: PIEL_CLARA,
+    remera: NEGRO,
+    mangas: CAMISA_LENIADORA,
+    pantalon: NEGRO,
+  });
+  ponerMullet(persona, PELO_CASTANO);
+  ponerCampera(persona, CAMISA_LENIADORA, 0.16);
+  persona.grupo.scale.setScalar(0.97); // estatura media: un poquito más bajo que el resto
+  grupo.add(persona.grupo);
+
+  const guitarra = crearGuitarra(NEGRO, 0.5);
+  guitarra.position.set(0.03, 1.0, 0.2);
+  guitarra.rotation.z = -1.1;
+  persona.grupo.add(guitarra);
+  posar(persona.izq, 0.55, 0.45, 0.9); // mano en el mástil
+  posar(persona.der, 0.3, 0.05, 1.0); // mano en las cuerdas
+
+  function animar(reloj, pulso, saludo, tema) {
+    // Mirar al cielo: un número que casi siempre es 0 y cada tanto sube a 1 un ratito
+    // (un seno lento elevado a la 6: solo se nota cerca de sus picos).
+    const alCielo = tema.conocido ? 0 : Math.max(0, Math.sin(reloj * 0.45)) ** 6;
+    persona.cabeza.rotation.x = mezclar(0.45 + pulso * 0.15, -0.5, alCielo); // gacha o al cielo
+    persona.cabeza.rotation.z = 0.2 * Math.sin(reloj * 0.6); // ladeada, de un lado al otro
+    persona.grupo.rotation.z = BALANCEO * Math.sin(reloj * 1.5);
+    persona.grupo.rotation.x = -pulso * 0.12; // se arquea para atrás con cada golpe
+    // Rasgueo (como en crearGuitarrista).
+    const rasgueo = Math.sin(reloj * 14) * (0.1 + pulso * 0.2);
+    persona.der.antebrazo.rotation.x = -(1.0 + rasgueo);
+  }
+  return { grupo, animar };
+}
+
+// Colo Giub: tez blanca y pelo colorado, con la guitarra criolla y el pie de micrófono.
+function crearColo() {
+  const persona = crearPersona({
+    piel: PIEL_MUY_CLARA,
+    remera: 0x3b5d85, // camisa de jean
+    mangas: 0x3b5d85,
+    pantalon: NEGRO,
+    pelo: PELO_COLORADO,
+  });
+  return crearCantanteConGuitarra(persona, crearGuitarraCriolla(), 1.2);
+}
+
 // ---------------------------------------------------------------------------
 // La banda completa
 // ---------------------------------------------------------------------------
@@ -1134,7 +1279,8 @@ function crearCebolla() {
  * (x = 4.5), los extras más afuera y la batería al fondo.
  *
  * @param {string} clave  Qué banda: 'ciro', 'pastillas', 'calamaro', 'guasones', 'callejeros',
- *                        'turf', 'intoxicados', 'ntvg' o 'velapuerca'
+ *                        'turf', 'intoxicados', 'ntvg' o 'velapuerca'; en la carpa,
+ *                        'leandotta', 'mv' o 'colo'
  * @param {object} musica  La música del escenario (ver crearMusica en musica.js)
  * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void,
  *             saludar: (posicionMundo: THREE.Vector3) => void }}
@@ -1155,9 +1301,10 @@ export function crearBanda(clave, musica) {
   }
 
   // Tarima de la batería: el baterista va al fondo, un poco más alto.
+  // (Solo en las bandas con baterista: las de la carpa no tienen.)
   const ALTO_TARIMA_BATERIA = 0.5;
-  pieza(grupo, caja(3.5, ALTO_TARIMA_BATERIA, 3), 0x222222, 0, ALTO_TARIMA_BATERIA / 2, -3);
   function agregarBaterista(musico) {
+    pieza(grupo, caja(3.5, ALTO_TARIMA_BATERIA, 3), 0x222222, 0, ALTO_TARIMA_BATERIA / 2, -3);
     agregar(musico, 0, -3.6);
     musico.grupo.position.y = ALTO_TARIMA_BATERIA;
   }
@@ -1222,6 +1369,18 @@ export function crearBanda(clave, musica) {
     agregar(crearSaxofonista({ piel: PIEL_TRIGUENA, remera: 0x3a4a2a, pantalon: NEGRO, pelo: PELO_NEGRO }, 0.5), -7.5, 0.5, 0.4);
     agregar(crearVientista({ piel: PIEL_CLARA, remera: CELESTE_URUGUAY, pantalon: JEAN, pelo: PELO_CASTANO }, 'trompeta', 1.2), 7.5, 0.5, -0.4);
     agregarBaterista(crearBaterista({ piel: PIEL_MEDIA, remera: GRIS_OSCURO, pantalon: NEGRO, pelo: PELO_NEGRO }, 0x3a1a0a, 'LA VELA PUERCA'));
+  } else if (clave === 'leandotta') {
+    // En la carpa el escenario es chico: todos más juntos.
+    agregar(crearLeanDotta(), 0, Z_CANTANTE);
+    // Cuarteto: el piano (el "tunga-tunga") a la derecha y el bajo a la izquierda.
+    agregar(crearTecladista({ piel: PIEL_TRIGUENA, remera: 0x1a1a40, pantalon: NEGRO, pelo: PELO_NEGRO }, 1.5), 2.6, 0.9, -0.4);
+    agregar(crearGuitarrista({ piel: PIEL_MEDIA, remera: BLANCO, pantalon: JEAN, pelo: PELO_NEGRO }, 0x1c1c1c, true, 2.5), -2.6, 1.4, 0.3);
+  } else if (clave === 'mv') {
+    // Pepi canta adelante; Manu, con la guitarra, un poco más atrás a su derecha (−X).
+    agregar(crearPepi(), 0.7, Z_CANTANTE, -0.1);
+    agregar(crearManu(), -1.4, 2.0, 0.3);
+  } else if (clave === 'colo') {
+    agregar(crearColo(), 0, Z_CANTANTE); // solo, con su guitarra
   }
 
   // --- Estado para el pulso ---

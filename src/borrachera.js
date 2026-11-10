@@ -4,6 +4,7 @@
 //  - Se mueve distinto: camina tambaleándose.
 //  - Está más eufórico: contagia más al público y llena más rápido el aguante-metro
 //    (lo leen acciones.js y aguante.js con euforia()).
+// Comer un choripán baja la borrachera (ver comer, lo llama barra.js).
 // Con muchos fernets se desmaya. La secuencia tiene estos estados:
 //   'normal' → 'cayendo' → 'inconsciente' → 'despertando' → 'normal'
 // Mientras está inconsciente (con la pantalla en negro) termina el festival, y se despierta
@@ -20,6 +21,8 @@ const FERNETS_PARA_DESMAYO = 5;
 const FERNETS_QUE_BAJAN_POR_MINUTO = 0.5; // se va pasando de a poco: un fernet cada 2 minutos
 const VELOCIDAD_EFECTO = 0.1; // no pega de golpe: el efecto cambia como mucho esto por segundo
 const SEGUNDOS_ANTES_DE_CAER = 1.5; // desde el último trago hasta que se empieza a caer
+const FERNETS_QUE_BAJA_UN_MORDISCO = 0.5; // un choripán entero (3 mordiscos) baja 1,5 fernets
+const TEXTO_CHORI = '🌭 El choripán te asienta... ya estás un poco mejor';
 
 // Avisos en pantalla al pasar cada cantidad de fernets. El primero sale un poco antes del
 // fernet entero porque, mientras se lo toma, el alcohol ya va bajando.
@@ -156,7 +159,7 @@ function acercar(valor, objetivo, paso) {
  * @param {() => void} opciones.alDormirse  Se llama con la pantalla ya en negro
  * @param {() => void} opciones.alDespertar  Se llama cuando empieza a abrir los ojos
  * @returns {{ actualizar: (delta: number) => void, tomarTrago: (fernets: number) => void,
- *             euforia: () => number, volumen: () => number,
+ *             comer: () => void, euforia: () => number, volumen: () => number,
  *             mareo: {altura: number, inclinacion: number, costado: number} }}
  *  - mareo: lo que hay que sumarle a la cámara (lo lee acciones.js, que es quien la mueve).
  *  - euforia: de 0 a 1, cuánto se nota el alcohol.
@@ -213,6 +216,27 @@ export function crearBorrachera({ camara, jugador, oyente, pasada, bloom, escena
     if (fernets >= FERNETS_PARA_DESMAYO && cuentaParaCaer < 0) {
       cuentaParaCaer = SEGUNDOS_ANTES_DE_CAER;
     }
+  }
+
+  /**
+   * El jugador le dio un mordisco al choripán (lo llama barra.js): baja el alcohol.
+   * Como con el fernet, el efecto no cambia de golpe sino de a poco (ver VELOCIDAD_EFECTO).
+   */
+  function comer() {
+    if (estado !== 'normal' || fernets === 0) {
+      return; // sobrio, o ya se está desmayando: no cambia nada
+    }
+    fernets = Math.max(0, fernets - FERNETS_QUE_BAJA_UN_MORDISCO);
+    // Si ya se iba a caer pero con el mordisco bajó del límite, se salvó.
+    if (fernets < FERNETS_PARA_DESMAYO) {
+      cuentaParaCaer = -1;
+    }
+    // Los avisos que ya no corresponden vuelven a estar "pendientes": si después toma
+    // de nuevo y vuelve a pasar esa cantidad, el aviso sale otra vez.
+    while (proximoAviso > 0 && fernets < AVISOS[proximoAviso - 1].fernets) {
+      proximoAviso--;
+    }
+    mostrarAviso(TEXTO_CHORI);
   }
 
   function mostrarAviso(texto) {
@@ -387,5 +411,5 @@ export function crearBorrachera({ camara, jugador, oyente, pasada, bloom, escena
     return 1 - apagado;
   }
 
-  return { actualizar, tomarTrago, euforia, volumen, mareo };
+  return { actualizar, tomarTrago, comer, euforia, volumen, mareo };
 }

@@ -32,10 +32,12 @@ const COLORES_BANDERINES = [0xff3355, 0xff9900, 0x33aaff, 0xffdd33, 0xffffff, 0x
  * @param {number} opciones.tamano  Lado del predio en metros (es cuadrado)
  * @param {Array<{x: number, z: number}>} opciones.escenarios  Dónde está cada escenario
  * @param {{x: number, z: number}} opciones.barra  Dónde está la barra
+ * @param {Array<{x: number, z: number}>} [opciones.otrosDestinos]  Otros lugares a los que
+ *        llega un camino desde el centro, sin la tierra pisada del público (la carpa)
  * @param {number} opciones.anisotropia  Ver main.js: hace que el piso se vea nítido a lo lejos
  * @returns {THREE.Mesh}
  */
-export function crearPiso({ tamano, escenarios, barra, anisotropia }) {
+export function crearPiso({ tamano, escenarios, barra, otrosDestinos = [], anisotropia }) {
   const canvas = document.createElement('canvas');
   canvas.width = PIXELES_PISO;
   canvas.height = PIXELES_PISO;
@@ -60,7 +62,7 @@ export function crearPiso({ tamano, escenarios, barra, anisotropia }) {
   ctx.strokeStyle = 'rgba(122, 98, 64, 0.7)';
   ctx.lineWidth = ANCHO_CAMINO * pixelesPorMetro;
   ctx.lineCap = 'round';
-  for (const destino of [...escenarios, barra]) {
+  for (const destino of [...escenarios, barra, ...otrosDestinos]) {
     ctx.beginPath();
     ctx.moveTo(aPixel(0), aPixel(0));
     ctx.lineTo(aPixel(destino.x), aPixel(destino.z));

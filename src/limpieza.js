@@ -235,6 +235,7 @@ export function crearLimpieza({ escenarios, jugador, camara }) {
   let reloj = 0;
   let mensaje = -1; // número del mensaje que se ve (−1 = ninguno)
   let finDeMensaje = 0; // hasta cuándo se ve
+  let alTerminarDeHablar = null; // función a la que avisamos después del último mensaje
 
   /**
    * Hace aparecer todo. El vecino queda al lado del jugador, en un lugar libre.
@@ -289,7 +290,10 @@ export function crearLimpieza({ escenarios, jugador, camara }) {
   }
 
   // Empieza a hablarle al jugador (se llama cuando abre los ojos).
-  function hablar() {
+  // alTerminar: función que se llama cuando termina el último mensaje (main.js muestra
+  // ahí el resumen de la noche).
+  function hablar(alTerminar) {
+    alTerminarDeHablar = alTerminar;
     mensaje = 0;
     finDeMensaje = reloj + SEGUNDOS_POR_MENSAJE;
     dialogo.textContent = MENSAJES[0];
@@ -345,6 +349,9 @@ export function crearLimpieza({ escenarios, jugador, camara }) {
       } else {
         mensaje = -1; // no hay más
         dialogo.style.display = 'none';
+        if (alTerminarDeHablar !== null) {
+          alTerminarDeHablar();
+        }
       }
     }
   }

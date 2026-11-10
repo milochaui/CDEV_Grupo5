@@ -531,7 +531,7 @@ function crearTrapos(trapos) {
 }
 
 // Colores de los trapos: [franjas de afuera, franja del medio]
-const DISENOS_TRAPO = [
+export const DISENOS_TRAPO = [
   ['#c8102e', '#ffffff'], // rojo y blanco
   ['#003da5', '#ffd100'], // azul y amarillo
   ['#111111', '#ffffff'], // negro y blanco
@@ -541,7 +541,8 @@ const DISENOS_TRAPO = [
 
 // Dibuja un trapo en un <canvas> (tres franjas y el texto encima) y lo usa como textura,
 // igual que el cartel con el nombre de la banda.
-function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
+// También la usa la carpa (ver carpa.js), para sus trapos.
+export function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
   const canvas = document.createElement('canvas');
   canvas.width = 560; // misma proporción que el trapo (2.8 x 1)
   canvas.height = 200;
@@ -584,11 +585,17 @@ function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
 // Programación: qué banda toca y cuándo
 // ---------------------------------------------------------------------------
 
+// Minutos del festival que el público pide el bis después del último tema (con el reloj
+// a 10 minutos por minuto real, ver grilla.js, 2 minutos son 12 segundos de juego).
+const MINUTOS_PIDIENDO_BIS = 2;
+
 /**
  * La programación de un escenario. Funciona como en un festival de verdad:
  *  - Cuando llega la hora de una banda (y el escenario está libre), sube y toca su set.
- *  - Cuando termina su último tema, se baja. El cartel anuncia a la que sigue
- *    y sus fans ya cuelgan los trapos.
+ *  - Cuando termina su último tema, se baja y el público pide "¡otra, otra!" un rato
+ *    (MINUTOS_PIDIENDO_BIS). Si alguien la pide de verdad (ver bis.js), la banda vuelve y
+ *    toca otra vez su tema conocido: el bis. Si no, el cartel anuncia a la que sigue y sus
+ *    fans ya cuelgan los trapos.
  *  - Si una banda se atrasa (sus temas duran más que su horario), la siguiente espera.
  *  - La última de la noche repite su lista de temas sin parar.
  *
@@ -600,11 +607,19 @@ function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
  * @param {Function} opciones.escribirCartel  La función que devuelve crearCartel
  * @returns {{ actualizar: (minutos: number) => void, adelantarA: (minutos: number) => void,
  *             terminarFestival: () => void, estadoDe: (numero: number) => string,
- *             hayFuegos: () => boolean, lineup: Array<object> }}
+ *             hayFuegos: () => boolean, lineup: Array<object>,
+ *             estaPidiendoBis: () => boolean, darBis: () => void }}
+ * (También la usa la carpa, ver carpa.js.)
  */
-function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }) {
+export function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }) {
   let actual = -1; // número del show que está tocando o del último que tocó (-1: todavía ninguno)
   let enVivo = false; // true mientras la banda "actual" está arriba del escenario
+  // El bis: después del último tema, el público lo pide hasta finPidiendo (en minutos del
+  // festival). Mientras tanto la banda está abajo, pero el show todavía no terminó (enVivo).
+  let pidiendoBis = false;
+  let finPidiendo = 0;
+  let yaHuboBis = false; // cada banda hace un solo bis
+  let minutosAhora = 0; // la última hora que nos pasaron (para saber hasta cuándo se pide)
 
   // Entre una banda y otra: el cartel anuncia a la que sigue y aparecen sus trapos.
   function anunciarProxima() {
@@ -625,6 +640,7 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     }
     actual = numero;
     enVivo = true;
+    yaHuboBis = false;
 
     const show = shows[numero];
     show.banda.grupo.visible = true;
@@ -642,6 +658,7 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
   // La banda terminó su set: se baja y se descuelgan sus trapos.
   function terminar() {
     enVivo = false;
+    pidiendoBis = false;
     shows[actual].banda.grupo.visible = false;
     shows[actual].trapos.visible = false;
     anunciarProxima();
@@ -653,9 +670,19 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
    * @param {number} minutos  La hora del festival (ver grilla.js)
    */
   function actualizar(minutos) {
+    minutosAhora = minutos;
     if (enVivo) {
       if (musica.hayShow()) {
         return; // la banda sigue tocando
+      }
+      // Terminó el último tema. Si todavía no hubo bis, el público lo pide un rato.
+      // (La última banda de la noche no termina nunca: repite su lista.)
+      if (!yaHuboBis && !pidiendoBis) {
+        empezarAPedirBis();
+        return;
+      }
+      if (pidiendoBis && minutos < finPidiendo) {
+        return; // siguen pidiendo
       }
       terminar();
     }
@@ -686,6 +713,10 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     if (!enVivo) {
       return; // el escenario está vacío: no hay nada que cortar ni que pasar
     }
+    if (pidiendoBis) {
+      finPidiendo = 0; // dejan de pedir: en el próximo actualizar() se termina el show
+      return;
+    }
     const proxima = shows[actual + 1];
     if (proxima !== undefined && minutos >= aMinutos(proxima.datos.inicio)) {
       musica.cortarSet();
@@ -705,6 +736,7 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     }
     actual = shows.length - 1;
     enVivo = false;
+    pidiendoBis = false;
     publico.irse();
     escribirCartel('¡GRACIAS!', 'HASTA LA PRÓXIMA');
   }
@@ -725,6 +757,38 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     return actual >= 0 && shows[actual].datos.fuegos !== false;
   }
 
+  // --- El bis ---
+
+  // La banda se baja (pero el show no terminó) y el cartel pide "¡otra, otra!".
+  function empezarAPedirBis() {
+    pidiendoBis = true;
+    finPidiendo = minutosAhora + MINUTOS_PIDIENDO_BIS;
+    shows[actual].banda.grupo.visible = false;
+    escribirCartel(shows[actual].datos.nombre, '¡OTRA, OTRA!');
+  }
+
+  // true mientras el público pide el bis (lo pregunta bis.js).
+  function estaPidiendoBis() {
+    return pidiendoBis;
+  }
+
+  // ¡Lo consiguieron! La banda vuelve y toca otra vez su tema conocido (o el último, si no
+  // tiene ninguno). Le copiamos el tema con "..." y le cambiamos el título, para que el
+  // indicador diga que es el bis; los booms se copian también, así el pogo explota igual.
+  function darBis() {
+    if (!pidiendoBis) {
+      return;
+    }
+    pidiendoBis = false;
+    yaHuboBis = true;
+    const show = shows[actual];
+    const temas = show.datos.temas;
+    const tema = temas.find((t) => t.conocido) ?? temas[temas.length - 1];
+    show.banda.grupo.visible = true;
+    escribirCartel(show.datos.nombre, '¡BIS!');
+    musica.tocarSet([{ ...tema, titulo: tema.titulo + ' (bis)' }], false);
+  }
+
   // Al principio, el cartel ya anuncia a la primera banda.
   anunciarProxima();
 
@@ -736,5 +800,7 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     hayFuegos,
     // Los datos de cada show (nombre, inicio, fin...), para armar la grilla.
     lineup: shows.map((show) => show.datos),
+    estaPidiendoBis,
+    darBis,
   };
 }

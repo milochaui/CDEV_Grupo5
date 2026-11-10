@@ -119,6 +119,14 @@
         letter-spacing: 2px;
         color: var(--texto-suave);
       }
+      /* Los de la carpa: una línea más, dorada */
+      .lineup-carpa {
+        margin: -18px 0 28px;
+        font-family: var(--fuente-titulo);
+        font-size: clamp(14px, 1.8vw, 18px);
+        letter-spacing: 2px;
+        color: #e8c46a;
+      }
       /* Controles en dos columnas */
       .controles {
         display: grid;
@@ -289,10 +297,77 @@
         color: var(--texto-suave);
       }
 
-      /* Aviso de que te quieren robar el celular (lo maneja robo.js): arriba de la mira */
+      /* Aviso del bis (lo completa bis.js): arriba de la mira */
+      #aviso-bis {
+        display: none;
+        top: calc(50% - 90px);
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: pre;
+        color: var(--dorado);
+      }
+
+      /* Resumen de la noche (lo maneja resumen.js): al centro, como la galería */
+      #resumen {
+        display: none; /* aparece a la mañana siguiente */
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(460px, 90vw);
+        padding: 20px 26px;
+        background: rgba(12, 8, 30, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid var(--borde);
+        border-radius: 16px;
+        color: #fff;
+        font-family: var(--fuente-texto);
+      }
+      #resumen h2 {
+        margin: 0 0 14px;
+        font-family: var(--fuente-titulo);
+        font-weight: normal;
+        font-size: 30px;
+        letter-spacing: 2px;
+        text-align: center;
+      }
+      #resumen-lista {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      /* Cada renglón: el texto a la izquierda y el valor a la derecha */
+      #resumen-lista li {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 16px;
+      }
+      #resumen-lista b {
+        color: var(--dorado);
+        text-align: right;
+      }
+      /* Los nombres de las bandas vistas, abajo de "Bandas que viste" */
+      #resumen-lista li.resumen-bandas {
+        display: block;
+        font-size: 13px;
+        color: var(--texto-suave);
+      }
+      #resumen .ayuda {
+        margin: 14px 0 0;
+        font-size: 13px;
+        color: var(--texto-suave);
+        text-align: center;
+      }
+
+      /* Aviso de que te quieren robar el celular (lo maneja robo.js) */
       #aviso-robo {
         display: none;
-        top: calc(50% - 70px);
+        /* Arriba de la pantalla: en el medio taparía al ladrón (y su marca) en la persecución */
+        top: 80px;
         left: 50%;
         transform: translateX(-50%);
         color: #ff8a8a;
@@ -370,7 +445,7 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%); /* centra el cartel sobre su propio medio */
-        width: min(900px, 92vw); /* 900 px, o menos si la ventana es angosta */
+        width: min(1120px, 94vw); /* 1120 px, o menos si la ventana es angosta */
         padding: 20px 24px;
         /* Como los carteles del juego (.cartel), pero más oscuro para que se lea bien */
         background: rgba(12, 8, 30, 0.88);
@@ -391,11 +466,11 @@
         letter-spacing: 2px;
       }
       #grilla-columnas {
-        display: flex; /* las tres columnas una al lado de la otra */
+        display: flex; /* las columnas una al lado de la otra */
         gap: 16px;
       }
       .grilla-columna {
-        flex: 1; /* las tres del mismo ancho */
+        flex: 1; /* todas del mismo ancho */
         border-top: 4px solid; /* el color lo pone grilla.js */
         padding-top: 8px;
       }
@@ -494,7 +569,7 @@
   <body>
     <!-- Cartel de inicio. Al hacer clic se captura el mouse y empieza el juego -->
     <div id="pantalla-inicio">
-      <div class="volanta">3 escenarios · 1 noche de rock</div>
+      <div class="volanta">3 escenarios + la carpita · 1 noche de rock</div>
       <h1 id="titulo-cartel">Salve Salve Rockanrol</h1>
       <p class="lineup">
         <span style="color: var(--rojo)">Ciro y los Persas</span><span class="estrella">★</span
@@ -503,6 +578,10 @@
       </p>
       <p class="lineup-tarde">
         Guasones · Callejeros · Turf · Intoxicados · No Te Va Gustar · La Vela Puerca
+      </p>
+      <!-- Los de la carpa (ver carpa.js) -->
+      <p class="lineup-carpa">
+        En La Carpita: Lean Dotta · Pepi Gabrielli y Manu Viale · Colo Giub
       </p>
       <div class="controles">
         <div><kbd>Mouse</kbd> mirar alrededor</div>
@@ -557,6 +636,16 @@
       <p id="galeria-descripcion"></p>
       <p id="galeria-numero"></p>
       <p class="ayuda">← → cambiar de foto · Z cerrar</p>
+    </div>
+
+    <!-- Aviso del bis: "¡otra, otra!" (lo completa bis.js) -->
+    <div id="aviso-bis" class="cartel"></div>
+
+    <!-- Resumen de la noche, a la mañana siguiente (lo completa resumen.js) -->
+    <div id="resumen">
+      <h2>🌅 Resumen de la noche</h2>
+      <ul id="resumen-lista"></ul>
+      <p class="ayuda">Enter para cerrar</p>
     </div>
 
     <!-- Aguante-metro (lo completa aguante.js) -->
