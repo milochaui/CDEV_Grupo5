@@ -97,6 +97,7 @@ export function crearEscenario(config) {
   crearTorresDeParlantes(escenario, materiales);
   const reflectores = crearReflectores(escenario, materiales, config.color);
   const luces = crearLuces(escenario, config.color);
+  const luzPublico = crearLuzPublico(escenario, config.color);
   const escribirCartel = crearCartel(escenario, config.color);
   crearValla(escenario, materiales);
 
@@ -149,6 +150,7 @@ export function crearEscenario(config) {
       reflectores: reflectores.lista,
       materialHaz: reflectores.materialHaz,
       luces: luces,
+      luzPublico: luzPublico,
       materialPantalla: pantalla.material,
     },
     musica
@@ -407,6 +409,16 @@ function crearLuces(escenario, color) {
   return spots;
 }
 
+// Otra luz real, del color del escenario, colgada del travesaño y apuntando al público:
+// ilumina de verdad el piso y a la gente. El show de luces la mueve y la hace flashear.
+function crearLuzPublico(escenario, color) {
+  const luz = new THREE.SpotLight(color, 0, 70, Math.PI / 4, 0.8);
+  luz.position.set(0, ALTO_ESTRUCTURA - 1, PROFUNDIDAD / 2);
+  escenario.add(luz);
+  escenario.add(luz.target);
+  return luz;
+}
+
 // Cartel con el nombre de la banda, arriba del travesaño de adelante.
 // Dibujamos el texto en un <canvas> 2D (como en una hoja) y lo usamos como textura.
 // Devuelve la función escribir(nombre, subtitulo), que lo vuelve a dibujar: la usa la
@@ -586,7 +598,8 @@ function crearMaterialTrapo(texto, [colorAfuera, colorMedio]) {
  * @param {object} opciones.musica  La música del escenario (ver musica.js)
  * @param {object} opciones.publico  El público (para cambiarle las banderas)
  * @param {Function} opciones.escribirCartel  La función que devuelve crearCartel
- * @returns {{ actualizar: (minutos: number) => void, estadoDe: (numero: number) => string,
+ * @returns {{ actualizar: (minutos: number) => void, adelantarA: (minutos: number) => void,
+ *             terminarFestival: () => void, estadoDe: (numero: number) => string,
  *             hayFuegos: () => boolean, lineup: Array<object> }}
  */
 function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }) {
@@ -660,6 +673,42 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
     }
   }
 
+  /**
+   * Se llama cuando el reloj se adelanta de golpe (ver grilla.js). Normalmente la banda
+   * que sigue espera a que termine la anterior; pero si adelantamos el reloj queremos
+   * verla ya: si llegó su hora, le cortamos el set a la que está tocando. En el próximo
+   * actualizar() la banda se baja y sube la que sigue.
+   * Si todavía no es la hora de la siguiente, la banda sigue pero pasa al próximo tema
+   * (como pasó el tiempo, ya no tiene sentido que siga sonando el mismo).
+   * @param {number} minutos  La nueva hora del festival
+   */
+  function adelantarA(minutos) {
+    if (!enVivo) {
+      return; // el escenario está vacío: no hay nada que cortar ni que pasar
+    }
+    const proxima = shows[actual + 1];
+    if (proxima !== undefined && minutos >= aMinutos(proxima.datos.inicio)) {
+      musica.cortarSet();
+    } else {
+      musica.pasarTema();
+    }
+  }
+
+  // Se terminó todo (ver main.js): se corta la música, se bajan la banda y los trapos, y se
+  // va el público. Dejamos "actual" en el último show: así no sube nadie más y la grilla
+  // muestra a todos como "ya tocó".
+  function terminarFestival() {
+    musica.cortarSet();
+    for (const show of shows) {
+      show.banda.grupo.visible = false;
+      show.trapos.visible = false;
+    }
+    actual = shows.length - 1;
+    enVivo = false;
+    publico.irse();
+    escribirCartel('¡GRACIAS!', 'HASTA LA PRÓXIMA');
+  }
+
   // Para la grilla: 'ahora' si ese show está tocando, 'ya-toco' si ya pasó y '' si todavía no.
   function estadoDe(numero) {
     if (numero === actual && enVivo) {
@@ -681,6 +730,8 @@ function crearProgramacion({ escenario, shows, musica, publico, escribirCartel }
 
   return {
     actualizar,
+    adelantarA,
+    terminarFestival,
     estadoDe,
     hayFuegos,
     // Los datos de cada show (nombre, inicio, fin...), para armar la grilla.

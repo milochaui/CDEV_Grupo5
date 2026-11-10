@@ -7,6 +7,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { crearRemeras, COLOR_REMERA, PROPORCION_REMERAS } from './remeras.js';
+import { crearRondas } from './ronda.js';
+import { crearPapelitos } from './papelitos.js';
 
 // ---------------------------------------------------------------------------
 // Constantes para ajustar
@@ -35,6 +37,16 @@ const BALANCEO_EUFORIA = 0.03;
 const BALANCEOS_POR_SEGUNDO = 0.4; // ida y vuelta completa cada 2.5 segundos
 const VELOCIDAD_BRAZOS = 3; // con 3 tardan 1/3 de segundo en subir o bajar del todo
 const PROPORCION_BRAZOS_OVACION = 0.8; // al terminar un tema, en lo más fuerte de los aplausos
+
+// --- El boom: cuando el tema explota (ver ronda.js) ---
+const EUFORIA_ANTES_DEL_BOOM = 0.25; // antes del primer boom del tema la gente está expectante
+const EXTRA_EXPLOSION = 0.5; // euforia que suma la explosión, en su momento más fuerte
+const SEGUNDOS_EXPLOSION = 6; // lo que tarda en apagarse esa euforia de más
+const ALTURA_SALTO_BOOM = 0.75; // metros: el salto de todos juntos cuando explota
+const RETRASO_ONDA_BOOM = 0.02; // segundos por metro: el salto se contagia desde la ronda, como una ola
+const ANGULO_BRAZOS_POGO = 1.1; // en el pogo los brazos van a media altura...
+const SACUDIDA_BRAZOS_POGO = 0.9; // ...y se sacuden para arriba y para abajo (radianes)
+const SACUDIDAS_BRAZOS_POR_SEGUNDO = 1.6;
 
 // --- Celulares con la linterna prendida (en los temas tranquilos) ---
 const PROPORCION_CELULAR_TRANQUI = 0.3; // 30 % de la gente levanta el celular
@@ -154,6 +166,38 @@ const COLORES_JEAN = [0x3b5b8c, 0x2a3f66, 0x4a6fa5];
 // Ángulo de los brazos (en radianes): casi colgando o casi verticales, un poco abiertos.
 export const ANGULO_BRAZO_ABAJO = 0.15;
 const ANGULO_BRAZO_ARRIBA = 2.8; // π sería derecho para arriba
+
+// --- Sombras ---
+// Ninguna luz proyecta sombras de verdad (son lo más pesado de dibujar, ver main.js). En su
+// lugar, cada persona lleva debajo una mancha oscura y difusa: un cuadrado acostado con un
+// degradé redondo de negro a transparente. Así la gente queda "apoyada" en el piso y, cuando
+// salta, se ve el aire entre sus pies y su sombra.
+export const ALTURA_SOMBRA = 0.04; // metros: un poquito sobre el piso, para que no "titile"
+export const geometriaSombra = new THREE.PlaneGeometry(1, 1);
+geometriaSombra.rotateX(-Math.PI / 2); // acostada, como el piso
+
+const canvasSombra = document.createElement('canvas');
+canvasSombra.width = 64;
+canvasSombra.height = 64;
+const ctxSombra = canvasSombra.getContext('2d');
+const degradeSombra = ctxSombra.createRadialGradient(32, 32, 4, 32, 32, 32);
+degradeSombra.addColorStop(0, 'rgba(0, 0, 0, 0.75)');
+degradeSombra.addColorStop(1, 'rgba(0, 0, 0, 0)');
+ctxSombra.fillStyle = degradeSombra;
+ctxSombra.fillRect(0, 0, 64, 64);
+
+export const materialSombra = new THREE.MeshBasicMaterial({
+  map: new THREE.CanvasTexture(canvasSombra),
+  transparent: true,
+  depthWrite: false, // no "tapa" a otros objetos transparentes
+  // Le dice a la placa de video que la dibuje como si estuviera un poquito más cerca: de
+  // lejos, 4 cm no alcanzan para distinguirla del piso.
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+  polygonOffsetUnits: -2,
+});
+const ACHIQUE_SOMBRA_POR_METRO = 0.6; // cuanto más alto salta, más chica queda su sombra
+const matrizSombra = new THREE.Matrix4(); // la reusamos para cada persona
 
 // "Muñeco" de ayuda: un Object3D invisible con la cabeza y los brazos como hijos.
 // Para cada persona lo acomodamos (posición, giro, brazos) y Three.js calcula la matriz
@@ -325,7 +369,8 @@ function alAzar(lista) {
  * @param {object} aplausos  Los aplausos del escenario (ver crearAplausos en aplausos.js)
  * @returns {{ grupo: THREE.Group, actualizar: (delta: number) => void,
  *             contagiar: Function, contarPersonasCerca: Function,
- *             cambiarBanderas: (nombres?: string[]) => void }}
+ *             cambiarBanderas: (nombres?: string[]) => void,
+ *             faseRondaCerca: (posicionMundo: THREE.Vector3, margen: number) => string | null }}
  */
 export function crearPublico(musica, aplausos) {
   const grupo = new THREE.Group();
@@ -353,6 +398,11 @@ export function crearPublico(musica, aplausos) {
   const brillos = crearPieza(geometriaBrillo, materialBrillo);
   const piernasIzq = crearPieza(geometriaPiernaSentada);
   const piernasDer = crearPieza(geometriaPiernaSentada);
+  const sombras = crearPieza(geometriaSombra, materialSombra); // una más: va en el piso
+
+  // Los papelitos que vuelan cuando explota el tema (ver papelitos.js).
+  const papelitos = crearPapelitos();
+  grupo.add(papelitos.malla);
 
   // Estampados de las remeras de bandas (ver remeras.js). En el muñeco, el pecho queda
   // a 1.05 m de los pies: en el medio del torso, también en los que van sentados.
@@ -389,6 +439,18 @@ export function crearPublico(musica, aplausos) {
       hombros: null, // si carga a alguien: dónde están sus hombros (un Vector3)
       bandera: null, // si ondea una bandera: el grupo de la bandera
       remera: null, // si lleva remera de banda: su estampado (ver remeras.js)
+      // Lo que maneja la ronda de pogo (ver ronda.js). x, z y giro son su lugar de siempre;
+      // estos dicen dónde está y hacia dónde mira ahora, por si lo corrieron.
+      ahoraX: x,
+      ahoraZ: z,
+      giroAhora: Math.atan2(-x, -z),
+      enRonda: false, // true si la ronda maneja sus saltos y su ladeo
+      alturaRonda: 0,
+      ladeoRonda: 0,
+      brazosArriba: false, // la ronda le pide levantar los brazos
+      revolea: false, // está revoleando la remera
+      pinta: null, // si es uno de los rockeros: su pelo, su jean y su remera
+      colorPiel: alAzar(COLORES_PIEL),
     };
     personas.push(persona);
 
@@ -405,7 +467,7 @@ export function crearPublico(musica, aplausos) {
     color.setHex(alAzar(COLORES_JEAN));
     piernasIzq.setColorAt(indice, color);
     piernasDer.setColorAt(indice, color);
-    color.setHex(alAzar(COLORES_PIEL));
+    color.setHex(persona.colorPiel);
     cabezas.setColorAt(indice, color);
     brazosIzq.setColorAt(indice, color);
     brazosDer.setColorAt(indice, color);
@@ -466,6 +528,14 @@ export function crearPublico(musica, aplausos) {
     grupo.add(persona.bandera);
   }
 
+  // Las rondas de pogo, con sus rockeros: van en cuero, así que les pintamos el cuerpo del
+  // color de la piel (ver crearPinta en ronda.js).
+  const rondas = crearRondas({ personas, musica, grupo });
+  for (const rockero of rondas.rockeros) {
+    color.setHex(rockero.colorPiel);
+    cuerpos.setColorAt(personas.indexOf(rockero), color);
+  }
+
   // Si no entraron todos (por falta de lugar), solo dibujamos los que sí.
   for (const pieza of [cuerpos, cabezas, brazosIzq, brazosDer, celulares, brillos, piernasIzq, piernasDer]) {
     pieza.count = personas.length;
@@ -476,6 +546,7 @@ export function crearPublico(musica, aplausos) {
   let reloj = 0; // segundos desde que empezó el juego
   let promedioGraves = 0; // cómo vienen sonando los graves últimamente
   let ultimoGolpe = -100; // momento del último golpe detectado
+  let explosion = 0; // 1 cuando el tema explota, y se va apagando hasta 0
 
   // --- Contagio del jugador ---
   // Lo manda acciones.js en cada cuadro con contagiar(). La gente cerca del jugador
@@ -518,17 +589,37 @@ export function crearPublico(musica, aplausos) {
    * @returns {number}
    */
   function contarPersonasCerca(posicionMundo, radio) {
+    if (!grupo.visible) {
+      return 0; // ya se fueron todos (ver irse)
+    }
     aCoordenadasDelPublico(posicionMundo, posicionConsulta);
     let cantidad = 0;
     for (const persona of personas) {
       if (persona.base !== null) {
         continue; // los que van en hombros no ocupan lugar en el piso
       }
-      if (Math.hypot(persona.x - posicionConsulta.x, persona.z - posicionConsulta.z) < radio) {
+      if (Math.hypot(persona.ahoraX - posicionConsulta.x, persona.ahoraZ - posicionConsulta.z) < radio) {
         cantidad++;
       }
     }
     return cantidad;
+  }
+
+  const posicionRonda = new THREE.Vector3(); // la reusa faseRondaCerca
+
+  /**
+   * Si hay una ronda activa cerca de una posición del predio, dice en qué fase está.
+   * La usa acciones.js para saber si el jugador está cerca del pogo o metido adentro.
+   * @param {THREE.Vector3} posicionMundo
+   * @param {number} margen  Metros afuera del círculo que también cuentan
+   * @returns {string | null}  'armando', 'pogo' o null si no hay ninguna cerca
+   */
+  function faseRondaCerca(posicionMundo, margen) {
+    if (!grupo.visible) {
+      return null; // ya se fueron todos (ver irse)
+    }
+    aCoordenadasDelPublico(posicionMundo, posicionRonda);
+    return rondas.faseCerca(posicionRonda.x, posicionRonda.z, margen);
   }
 
   /**
@@ -536,11 +627,23 @@ export function crearPublico(musica, aplausos) {
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
    */
   function actualizar(delta) {
+    if (!grupo.visible) {
+      return; // ya se fueron todos (ver irse)
+    }
     reloj += delta;
+
+    // Las rondas de pogo mueven a la gente que corresponda (ver ronda.js).
+    rondas.actualizar(delta);
 
     // --- 1. Euforia según el tema ---
     // Objetivo: 1 si suena un tema conocido, 0 si no (o si todavía no suena nada).
-    const objetivo = musica.estaSonando() && musica.temaActual().conocido ? 1 : 0;
+    // Si el tema tiene booms, hasta el primero la gente está expectante: guarda la energía.
+    const tema = musica.temaActual();
+    const antesDelBoom = tema.booms !== undefined && musica.segundosDelTema() < tema.booms[0];
+    let objetivo = 0;
+    if (musica.estaSonando() && tema.conocido) {
+      objetivo = antesDelBoom ? EUFORIA_ANTES_DEL_BOOM : 1;
+    }
     // La euforia se acerca al objetivo de a poco, siempre a la misma velocidad:
     // en SEGUNDOS_TRANSICION segundos recorre el camino completo de 0 a 1.
     const paso = delta / SEGUNDOS_TRANSICION;
@@ -549,6 +652,16 @@ export function crearPublico(musica, aplausos) {
     } else {
       euforia = Math.max(objetivo, euforia - paso);
     }
+
+    // ¿Explotó el tema justo ahora? La euforia va al máximo de una.
+    const hayBoom = rondas.hayBoom();
+    if (hayBoom) {
+      euforia = 1;
+      explosion = 1;
+      papelitos.tirar();
+    }
+    papelitos.actualizar(delta);
+    explosion = Math.max(0, explosion - delta / SEGUNDOS_EXPLOSION);
 
     // --- 2. ¿Hubo un golpe grave? ---
     // Un golpe es cuando los graves suben de repente por encima de cómo venían sonando.
@@ -575,12 +688,13 @@ export function crearPublico(musica, aplausos) {
       const persona = personas[i];
 
       // Contagio: cercanía al jugador, de 1 (pegado) a 0 (en el borde del radio o más lejos).
-      const distanciaJugador = Math.hypot(persona.x - jugadorLocal.x, persona.z - jugadorLocal.z);
+      const distanciaJugador = Math.hypot(persona.ahoraX - jugadorLocal.x, persona.ahoraZ - jugadorLocal.z);
       const cercania = Math.max(0, 1 - distanciaJugador / radioContagio);
       // Euforia propia de esta persona: la del tema más el contagio.
       // Puede pasar de 1: así, aun con un tema conocido (euforia ya en 1), los que
       // están cerca del jugador se ponen más eufóricos que el resto.
-      const euforiaPersona = euforia + extraEuforia * cercania;
+      // Y cuando el tema explota, un rato de más.
+      const euforiaPersona = euforia + extraEuforia * cercania + explosion * EXTRA_EXPLOSION;
 
       // Valores de esta persona, entre "tranquilos" y "euforia".
       // Con euforiaPersona mayor que 1, mezclar se pasa un poco de los valores de euforia
@@ -601,11 +715,18 @@ export function crearPublico(musica, aplausos) {
       // Ni el que va en hombros ni el que lo carga saltan.
       const enHombros = persona.base !== null;
       const cargaAAlguien = persona.hombros !== null;
-      const puedeSaltar = !enHombros && !cargaAAlguien;
+      const puedeSaltar = !enHombros && !cargaAAlguien && !persona.enRonda;
       const estaEnElAire = reloj < persona.inicioSalto + DURACION_SALTO;
       if (hayGolpe && puedeSaltar && !estaEnElAire && persona.ganasSaltar < proporcionSaltan) {
         persona.inicioSalto = reloj + Math.random() * RETRASO_MAXIMO_SALTO;
         persona.alturaSalto = alturaSalto * mezclar(0.7, 1.3, Math.random());
+      }
+      // Cuando el tema explota saltan todos juntos, sin esperar el golpe. Arranca en las
+      // rondas y se va contagiando hacia afuera, como una ola.
+      if (hayBoom && puedeSaltar) {
+        const distanciaOla = Math.hypot(persona.x, persona.z - 10); // desde adelante y al medio
+        persona.inicioSalto = reloj + distanciaOla * RETRASO_ONDA_BOOM;
+        persona.alturaSalto = ALTURA_SALTO_BOOM * mezclar(0.7, 1.3, Math.random());
       }
 
       // Altura del salto: una parábola. p va de 0 (despega) a 1 (aterriza);
@@ -619,18 +740,20 @@ export function crearPublico(musica, aplausos) {
 
       // Brazos: van de a poco hacia arriba (1) o hacia abajo (0).
       // El que carga a alguien los tiene abajo: le está agarrando las piernas.
-      const objetivoBrazos = !cargaAAlguien && persona.ganasBrazos < proporcionBrazos ? 1 : 0;
+      // La ronda también se los puede hacer levantar.
+      const quiereBrazos = persona.ganasBrazos < proporcionBrazos || persona.brazosArriba;
+      const objetivoBrazos = !cargaAAlguien && quiereBrazos ? 1 : 0;
       const pasoBrazos = VELOCIDAD_BRAZOS * delta;
       if (persona.brazos < objetivoBrazos) {
         persona.brazos = Math.min(objetivoBrazos, persona.brazos + pasoBrazos);
       } else {
         persona.brazos = Math.max(objetivoBrazos, persona.brazos - pasoBrazos);
       }
-      const anguloBrazos = mezclar(
-        ANGULO_BRAZO_ABAJO,
-        ANGULO_BRAZO_ARRIBA + persona.aperturaBrazos,
-        persona.brazos
-      );
+      // Dando vueltas o en el pogo los brazos se sacuden, en vez de quedarse quietos.
+      const anguloBrazos = persona.enRonda
+        ? ANGULO_BRAZOS_POGO +
+          SACUDIDA_BRAZOS_POGO * Math.sin(reloj * Math.PI * 2 * SACUDIDAS_BRAZOS_POR_SEGUNDO + persona.faseBalanceo)
+        : mezclar(ANGULO_BRAZO_ABAJO, ANGULO_BRAZO_ARRIBA + persona.aperturaBrazos, persona.brazos);
 
       // Balanceo de costado: una onda (seno) que va de −1 a 1, con el ritmo propio de cada uno.
       const onda = Math.sin(
@@ -639,8 +762,11 @@ export function crearPublico(musica, aplausos) {
 
       // Acomodamos el muñeco como esta persona...
       // El que va en hombros se balancea junto con el de abajo.
-      persona.ladeo = enHombros ? persona.base.ladeo : balanceo * onda;
-      muneco.rotation.set(0, persona.giro, persona.ladeo);
+      // El que corre en el pogo, además, se ladea para los costados (ladeoRonda).
+      persona.ladeo = enHombros ? persona.base.ladeo : balanceo * onda + persona.ladeoRonda;
+      // Mira para donde lo dejó la ronda. El de arriba, para el mismo lado que el que lo carga.
+      const giro = enHombros ? persona.base.giroAhora : persona.giroAhora;
+      muneco.rotation.set(0, giro, persona.ladeo);
       muneco.scale.setScalar(persona.escala);
       if (enHombros) {
         // Sentado en los hombros del de abajo: su cadera (no sus pies) va donde quedaron
@@ -649,7 +775,8 @@ export function crearPublico(musica, aplausos) {
         desplazamientoCadera.set(0, -ALTURA_CADERA * persona.escala, 0).applyEuler(muneco.rotation);
         muneco.position.copy(persona.base.hombros).add(desplazamientoCadera);
       } else {
-        muneco.position.set(persona.x, altura, persona.z);
+        // Con la ronda manejando sus saltos, la altura la pone ella.
+        muneco.position.set(persona.ahoraX, persona.enRonda ? persona.alturaRonda : altura, persona.ahoraZ);
       }
       // Cada brazo gira hacia afuera: el de +X con ángulo positivo, el de −X con negativo.
       // El que carga a alguien, en cambio, los lleva hacia adelante: lo agarra de los tobillos.
@@ -668,7 +795,7 @@ export function crearPublico(musica, aplausos) {
       const manosOcupadas = persona.bandera !== null || cargaAAlguien;
       const proporcionCelular = mezclar(PROPORCION_CELULAR_TRANQUI, PROPORCION_CELULAR_EUFORIA, euforiaPersona);
       const objetivoCelular =
-        !manosOcupadas && musica.estaSonando() && persona.ganasCelular < proporcionCelular ? 1 : 0;
+        !manosOcupadas && !persona.enRonda && musica.estaSonando() && persona.ganasCelular < proporcionCelular ? 1 : 0;
       const pasoCelular = VELOCIDAD_CELULAR * delta;
       if (persona.celular < objetivoCelular) {
         persona.celular = Math.min(objetivoCelular, persona.celular + pasoCelular);
@@ -679,8 +806,9 @@ export function crearPublico(musica, aplausos) {
         VAIVEN_CELULAR * Math.sin(reloj * Math.PI * 2 * VAIVENES_POR_SEGUNDO + persona.faseVaiven);
       if (cargaAAlguien) {
         // Nada: el brazo derecho ya quedó agarrando al de arriba (ver más arriba).
-      } else if (persona.bandera !== null) {
+      } else if (persona.bandera !== null || persona.revolea) {
         // El que tiene bandera la sostiene con el brazo derecho bien arriba.
+        // Igual el rockero, que revolea la remera.
         munecoBrazoDer.rotation.z = -ANGULO_BRAZO_BANDERA;
       } else {
         // El brazo derecho va del ángulo de siempre al de "celular arriba", según cuánto lo levantó.
@@ -701,8 +829,23 @@ export function crearPublico(musica, aplausos) {
       if (persona.bandera !== null) {
         persona.bandera.position.setFromMatrixPosition(munecoManoDer.matrixWorld);
         const agitePalo = Math.sin(reloj * Math.PI * 2 * AGITES_PALO_POR_SEGUNDO + persona.faseBalanceo);
-        persona.bandera.rotation.set(0, persona.giro, agitePalo * AGITE_PALO);
+        persona.bandera.rotation.set(0, persona.giroAhora, agitePalo * AGITE_PALO);
         ondearTela(persona.bandera, reloj);
+      }
+
+      // Si es un rockero: su pelo y su jean van con él, y revolea la remera.
+      if (persona.pinta !== null) {
+        persona.pinta.mover(muneco.matrixWorld, munecoManoDer.matrixWorld, reloj, persona.revolea);
+      }
+
+      // La sombra se queda en el piso, debajo de los pies, y se achica mientras está en el aire.
+      // El que va en hombros no tiene: ya está la del que lo carga.
+      if (enHombros) {
+        sombras.setMatrixAt(i, MATRIZ_OCULTA);
+      } else {
+        const lado = persona.escala * (1 - Math.min(0.6, muneco.position.y * ACHIQUE_SOMBRA_POR_METRO));
+        matrizSombra.makeScale(lado, 1, lado).setPosition(muneco.position.x, ALTURA_SOMBRA, muneco.position.z);
+        sombras.setMatrixAt(i, matrizSombra);
       }
 
       // ...y copiamos la matriz de cada pieza a su InstancedMesh.
@@ -729,7 +872,7 @@ export function crearPublico(musica, aplausos) {
     }
 
     // Avisamos que las matrices cambiaron, para que se manden a la placa de video.
-    for (const pieza of [cuerpos, cabezas, brazosIzq, brazosDer, celulares, brillos, piernasIzq, piernasDer]) {
+    for (const pieza of [cuerpos, cabezas, brazosIzq, brazosDer, celulares, brillos, piernasIzq, piernasDer, sombras]) {
       pieza.instanceMatrix.needsUpdate = true;
     }
     remeras.avisarCambios();
@@ -751,5 +894,10 @@ export function crearPublico(musica, aplausos) {
   // Lo llamamos una vez para que la gente aparezca en su lugar antes del primer cuadro.
   actualizar(0);
 
-  return { grupo, actualizar, contagiar, contarPersonasCerca, cambiarBanderas };
+  // Terminó el festival: se va todo el público.
+  function irse() {
+    grupo.visible = false;
+  }
+
+  return { grupo, actualizar, contagiar, contarPersonasCerca, cambiarBanderas, irse, faseRondaCerca };
 }

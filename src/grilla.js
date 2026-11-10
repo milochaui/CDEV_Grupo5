@@ -12,6 +12,10 @@ import * as THREE from 'three';
 
 const TECLA_GRILLA = 'KeyG';
 
+// Atajo para la demo: adelanta el reloj hasta que empieza la próxima banda (de cualquier
+// escenario). Apretándola varias veces se pueden mostrar todas las bandas sin esperar.
+const TECLA_ADELANTAR = 'KeyT';
+
 // Hora a la que arranca el juego: un ratito antes de que toquen las primeras bandas.
 // (Para ir directo a las bandas de la noche, probar con '20:58'.)
 const HORA_INICIO = '17:58';
@@ -44,7 +48,8 @@ function aTextoHora(minutosTotales) {
  *
  * @param {object} jugador  Lo que devuelve crearJugador (para saber si está en pausa)
  * @param {THREE.Group[]} escenarios  Los escenarios: de su programación sale la grilla
- * @returns {{ actualizar: (delta: number) => void, minutos: () => number }}
+ * @returns {{ actualizar: (delta: number) => void, minutos: () => number,
+ *             cerrar: () => void, ponerHora: (minutos: number) => void }}
  */
 export function crearGrilla(jugador, escenarios) {
   const reloj = document.getElementById('reloj');
@@ -118,10 +123,41 @@ export function crearGrilla(jugador, escenarios) {
     }
   }
 
+  // --- Adelantar el reloj (tecla T) ---
+  // Busca, entre los horarios de todos los escenarios, el primer "inicio" que todavía
+  // no llegó, y pone el reloj en esa hora. Si ya empezaron todas, no hace nada.
+  function adelantarReloj() {
+    let proximoInicio = Infinity; // Infinity: "todavía no encontramos ninguno"
+    for (const escenario of escenarios) {
+      for (const show of escenario.userData.programacion.lineup) {
+        const inicio = aMinutos(show.inicio);
+        if (inicio > minutosFestival && inicio < proximoInicio) {
+          proximoInicio = inicio;
+        }
+      }
+    }
+    if (proximoInicio === Infinity) {
+      return; // ya tocan las bandas de la noche: no hay a dónde adelantar
+    }
+    minutosFestival = proximoInicio;
+    mostrarHora();
+    // Si en algún escenario sigue tocando la banda anterior, la cortamos para que suba
+    // la nueva (ver adelantarA en escenario.js).
+    for (const escenario of escenarios) {
+      escenario.userData.programacion.adelantarA(minutosFestival);
+    }
+  }
+
   document.addEventListener('keydown', (event) => {
     // Solo mientras se juega (no en el cartel de inicio ni en pausa).
-    if (event.code === TECLA_GRILLA && !event.repeat && jugador.controles.isLocked) {
+    if (event.repeat || !jugador.puedeActuar()) {
+      return;
+    }
+    if (event.code === TECLA_GRILLA) {
       abrir(!abierta);
+    }
+    if (event.code === TECLA_ADELANTAR) {
+      adelantarReloj();
     }
   });
 
@@ -155,5 +191,17 @@ export function crearGrilla(jugador, escenarios) {
     return minutosFestival;
   }
 
-  return { actualizar, minutos };
+  // Cierra la grilla (por ejemplo, si el jugador se desmaya con ella abierta).
+  function cerrar() {
+    abrir(false);
+  }
+
+  // Pone el reloj en una hora. Para el día siguiente se sigue contando desde esta medianoche:
+  // las 07:00 de mañana son (24 + 7) × 60 minutos.
+  function ponerHora(minutos) {
+    minutosFestival = minutos;
+    mostrarHora();
+  }
+
+  return { actualizar, minutos, cerrar, ponerHora };
 }

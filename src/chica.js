@@ -2,8 +2,8 @@
 // Cuando el jugador está metido entre el público y empieza un tema tranqui (no conocido),
 // aparece una chica adelante y le pregunta si la sube a los hombros.
 // Se responde con 1 (sí) o 2 (no). Si dice que sí, va sentada en los hombros del jugador
-// hasta que termina el tema: en primera persona se ven sus piernas colgando, y en tercera
-// persona (tecla V, ver terceraPersona.js) se la ve entera.
+// hasta que termina el tema o hasta que la baja con la B: en primera persona se ven sus
+// piernas colgando, y en tercera persona (tecla V, ver terceraPersona.js) se la ve entera.
 import * as THREE from 'three';
 import { escenarioEntreElPublico } from './acciones.js';
 import { geometriaPiernaSentada, SEPARACION_PIERNAS } from './publico.js';
@@ -15,6 +15,7 @@ import { geometriaPiernaSentada, SEPARACION_PIERNAS } from './publico.js';
 // --- Teclas (event.code: la tecla física) ---
 const TECLA_SI = 'Digit1';
 const TECLA_NO = 'Digit2';
+const TECLA_BAJAR = 'KeyB';
 
 // --- Cuándo pregunta ---
 // Pregunta durante los primeros segundos del tema tranqui. Así, si el jugador llega al
@@ -181,7 +182,7 @@ function crearPierna(x, materialJean, materialZapatilla) {
  * @param {Array<THREE.Group>} opciones.escenarios  Los escenarios (con su música y su público)
  * @param {THREE.Object3D} opciones.hombros  Los hombros del cuerpo del jugador en tercera
  *        persona (ver terceraPersona.js): ahí se sienta
- * @returns {{ actualizar: (delta: number) => void }}
+ * @returns {{ actualizar: (delta: number) => void, irse: () => void }}
  */
 export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
   // --- La chica parada ---
@@ -209,13 +210,16 @@ export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
 
   // --- Estado ---
   // 'esperando': todavía no pasa nada. 'preguntando': la chica espera la respuesta.
-  // 'en hombros': la subimos y está arriba hasta que termine el tema.
+  // 'en hombros': la subimos y está arriba hasta que termine el tema o la bajemos.
+  // 'despidiendo': ya bajó: se queda un ratito adelante, saludando, y se va.
+  // 'se fue': el jugador se desmayó: ya no vuelve (ver irse).
   let estado = 'esperando';
   let reloj = 0; // segundos de juego (sin contar las pausas)
   let escenarioDelPedido = null; // en qué escenario pasó
   let numeroDelTema = 0; // qué vez del tema era (ver numeroDeTema en musica.js)
   let finDePregunta = 0; // hasta cuándo espera la respuesta
   let finDeMensaje = 0; // hasta cuándo se ve el mensaje del cartelito
+  let finDeDespedida = 0; // hasta cuándo se queda saludando después de bajar
 
   // Para preguntar una sola vez por tema: por cada escenario guardamos el número del
   // último tema en el que ya preguntó. Un Map es como un objeto donde la "clave"
@@ -229,14 +233,8 @@ export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
     finDeMensaje = segundos ? reloj + segundos : Infinity; // Infinity: no se borra solo
   }
 
-  // La chica aparece adelante del jugador, mirándolo, y pregunta.
-  function preguntar(escenario) {
-    estado = 'preguntando';
-    escenarioDelPedido = escenario;
-    numeroDelTema = escenario.userData.musica.numeroDeTema();
-    yaPreguntoEn.set(escenario, numeroDelTema);
-    finDePregunta = reloj + SEGUNDOS_PARA_RESPONDER;
-
+  // Pone a la chica parada adelante del jugador, mirándolo.
+  function pararAdelante() {
     // Hacia dónde mira el jugador, sin subir ni bajar (como al caminar).
     const adelante = new THREE.Vector3();
     camara.getWorldDirection(adelante);
@@ -250,7 +248,17 @@ export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
     // Que mire al jugador (atan2 da el ángulo para mirar en esa dirección, como en publico.js).
     chica.rotation.y = Math.atan2(camara.position.x - chica.position.x, camara.position.z - chica.position.z);
     chica.visible = true;
+  }
 
+  // La chica aparece adelante del jugador y pregunta.
+  function preguntar(escenario) {
+    estado = 'preguntando';
+    escenarioDelPedido = escenario;
+    numeroDelTema = escenario.userData.musica.numeroDeTema();
+    yaPreguntoEn.set(escenario, numeroDelTema);
+    finDePregunta = reloj + SEGUNDOS_PARA_RESPONDER;
+
+    pararAdelante();
     mostrar('👧 «¡Ey! ¿Me subís a tus hombros?»\n[1] Sí     [2] No');
   }
 
@@ -270,23 +278,39 @@ export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
     mostrar(texto, SEGUNDOS_MENSAJE);
   }
 
-  // Termina el tema: la chica se baja.
-  function bajar() {
-    estado = 'esperando';
+  // La chica se baja (terminó el tema o la bajó el jugador): deja los hombros, queda
+  // parada adelante y se despide. No vuelve a preguntar en este tema (ver yaPreguntoEn).
+  function bajar(texto) {
+    estado = 'despidiendo';
     piernas.visible = false;
     sentada.chica.visible = false;
-    mostrar('👧 «¡Qué temazo! Gracias por subirme»', SEGUNDOS_MENSAJE);
+    pararAdelante();
+    finDeDespedida = reloj + SEGUNDOS_MENSAJE;
+    mostrar(texto, SEGUNDOS_MENSAJE);
   }
 
-  // --- Teclado: 1 = sí, 2 = no (solo mientras pregunta y se está jugando) ---
+  // El jugador se desmayó: se baja (o deja de preguntar) y no vuelve más.
+  function irse() {
+    estado = 'se fue';
+    chica.visible = false;
+    piernas.visible = false;
+    sentada.chica.visible = false;
+    dialogo.style.display = 'none';
+    finDeMensaje = Infinity;
+  }
+
+  // --- Teclado (solo mientras se está jugando) ---
+  // Mientras pregunta: 1 = sí, 2 = no. Con la chica arriba: B = bajarla.
   document.addEventListener('keydown', (event) => {
-    if (estado !== 'preguntando' || !jugador.controles.isLocked) {
+    if (!jugador.controles.isLocked) {
       return;
     }
-    if (event.code === TECLA_SI) {
+    if (estado === 'preguntando' && event.code === TECLA_SI) {
       aceptar();
-    } else if (event.code === TECLA_NO) {
+    } else if (estado === 'preguntando' && event.code === TECLA_NO) {
       rechazar('👧 «Bueno, no pasa nada»');
+    } else if (estado === 'en hombros' && event.code === TECLA_BAJAR) {
+      bajar('👧 «¡Dale, gracias por el aguante!»');
     }
   });
 
@@ -329,16 +353,28 @@ export function crearChica({ escena, camara, jugador, escenarios, hombros }) {
       sentada.brazoDerecho.rotation.z = festejo;
       // Si cambió el tema en ese escenario (terminó el tranqui), se baja.
       if (escenarioDelPedido.userData.musica.numeroDeTema() !== numeroDelTema) {
-        bajar();
+        bajar('👧 «¡Qué temazo! Gracias por subirme»');
+      }
+    } else if (estado === 'despidiendo') {
+      // Saluda igual que cuando preguntó, y después se va.
+      brazoDerecho.rotation.z = 0.3 + Math.sin(reloj * 8) * 0.3;
+      if (reloj > finDeDespedida) {
+        estado = 'esperando';
+        chica.visible = false;
       }
     }
 
-    // Borramos el mensaje cuando se le acaba el tiempo.
+    // Cuando se le acaba el tiempo al mensaje lo borramos. Con la chica arriba, en su lugar
+    // queda el recordatorio de cómo bajarla.
     if (reloj > finDeMensaje) {
-      dialogo.style.display = 'none';
-      finDeMensaje = Infinity;
+      if (estado === 'en hombros') {
+        mostrar('[B] Bajar a la chica');
+      } else {
+        dialogo.style.display = 'none';
+        finDeMensaje = Infinity;
+      }
     }
   }
 
-  return { actualizar };
+  return { actualizar, irse };
 }

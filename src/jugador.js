@@ -25,7 +25,9 @@ const RADIO_JUGADOR = 0.4;
  *        de afuera de la valla del frente (+Z): ahí también se puede caminar (ver vallas.js)
  * @returns {{ controles: PointerLockControls, actualizar: (delta: number) => void,
  *             desplazar: (dx: number, dz: number) => void,
- *             acotarAlPredio: (posicion: THREE.Vector3, anteriorZ: number) => void }}
+ *             acotarAlPredio: (posicion: THREE.Vector3, anteriorZ: number) => void,
+ *             estaLibre: (x: number, z: number) => boolean,
+ *             bloquear: (valor: boolean) => void, puedeActuar: () => boolean }}
  */
 export function crearJugador(camara, elemento, opciones) {
   // PointerLockControls (viene con Three.js) se encarga de:
@@ -36,6 +38,9 @@ export function crearJugador(camara, elemento, opciones) {
   const controles = new PointerLockControls(camara, elemento);
 
   camara.position.y = ALTURA_OJOS;
+
+  // Desmayado (ver borrachera.js) el jugador no puede moverse, mirar ni hacer nada.
+  let bloqueado = false;
 
   // --- Teclado ---
   // Guardamos qué teclas están apretadas en este momento.
@@ -111,6 +116,29 @@ export function crearJugador(camara, elemento, opciones) {
     }
   }
 
+  // true si un punto del piso está adentro del predio y no choca con nada.
+  // La usa la gente que limpia para no aparecer adentro de otra cosa (ver limpieza.js).
+  function estaLibre(x, z) {
+    const punto = { x, z };
+    acotarAlPredio(punto, z);
+    // Si acotarAlPredio tuvo que correrlo, es porque estaba afuera.
+    return punto.x === x && punto.z === z && !chocaConAlgo(x, z);
+  }
+
+  /**
+   * Bloquea o desbloquea al jugador. Bloqueado no camina ni gira con el mouse.
+   * @param {boolean} valor
+   */
+  function bloquear(valor) {
+    bloqueado = valor;
+    controles.pointerSpeed = valor ? 0 : 1; // pointerSpeed: cuánto gira con el mouse
+  }
+
+  // true si el jugador puede hacer cosas: está jugando (no en pausa) y no está desmayado.
+  function puedeActuar() {
+    return controles.isLocked && !bloqueado;
+  }
+
   /**
    * Mueve al jugador (dx, dz) metros en el predio, sin dejarlo salir del borde
    * ni atravesar obstáculos. La usa la caminata y también los empujones del pogo.
@@ -148,8 +176,8 @@ export function crearJugador(camara, elemento, opciones) {
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
    */
   function actualizar(delta) {
-    // Si el mouse no está capturado (pantalla de inicio), el jugador no se mueve.
-    if (!controles.isLocked) {
+    // Si el mouse no está capturado (pantalla de inicio) o está desmayado, no se mueve.
+    if (!puedeActuar()) {
       return;
     }
 
@@ -193,5 +221,5 @@ export function crearJugador(camara, elemento, opciones) {
     // La altura de los ojos (y el salto) la maneja acciones.js.
   }
 
-  return { controles, actualizar, desplazar, acotarAlPredio };
+  return { controles, actualizar, desplazar, acotarAlPredio, estaLibre, bloquear, puedeActuar };
 }

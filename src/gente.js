@@ -5,6 +5,9 @@
 // Usan las mismas piezas que el público (ver publico.js), con InstancedMesh.
 import * as THREE from 'three';
 import {
+  geometriaSombra,
+  materialSombra,
+  ALTURA_SOMBRA,
   ALTO_CUERPO,
   geometriaCuerpo,
   geometriaCabeza,
@@ -248,6 +251,18 @@ export function crearGenteDelMedio({ obstaculos }) {
   const piezasParados = crearPiezas([geometriaCuerpo], parados, FORMA_PARADO);
   const piezasSentados = crearPiezas([geometriaTorsoSentado, geometriaPiernasCruzadas], sentados, FORMA_SENTADO);
 
+  // Sombras en el piso (ver publico.js). Esta gente no se mueve de su lugar: alcanza con
+  // acomodarlas una sola vez.
+  const todos = [...parados, ...sentados];
+  const sombras = new THREE.InstancedMesh(geometriaSombra, materialSombra, todos.length);
+  sombras.frustumCulled = false;
+  const matrizSombra = new THREE.Matrix4();
+  todos.forEach((persona, i) => {
+    matrizSombra.makeScale(persona.escala, 1, persona.escala).setPosition(persona.x, ALTURA_SOMBRA, persona.z);
+    sombras.setMatrixAt(i, matrizSombra);
+  });
+  grupo.add(sombras);
+
   // --- 4. Movimiento ---
   let reloj = 0;
 
@@ -293,6 +308,9 @@ export function crearGenteDelMedio({ obstaculos }) {
    * @param {number} delta  Segundos que pasaron desde el cuadro anterior
    */
   function actualizar(delta) {
+    if (!grupo.visible) {
+      return; // terminó el festival y ya se fueron (ver main.js)
+    }
     reloj += delta;
     dibujar(parados, piezasParados, FORMA_PARADO);
     dibujar(sentados, piezasSentados, FORMA_SENTADO);

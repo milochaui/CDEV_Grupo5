@@ -369,9 +369,10 @@
         color: var(--texto-suave);
       }
 
-      /* Diálogo de la chica que pide subirse a los hombros: abajo al centro */
+      /* Diálogos (la chica que pide subirse a los hombros y el que barre): abajo al centro */
       /* (el resto del estilo viene de .cartel) */
-      #dialogo-chica {
+      #dialogo-chica,
+      #dialogo-limpieza {
         display: none; /* se muestra solo durante el pedido */
         bottom: 70px;
         left: 50%;
@@ -381,6 +382,38 @@
         font-size: 18px;
         text-align: center;
         white-space: pre; /* respeta los saltos de línea del texto */
+      }
+
+      /* Avisos de la borrachera: arriba al centro, debajo de las acciones */
+      #aviso-borrachera {
+        display: none;
+        top: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: pre;
+        color: var(--dorado);
+      }
+
+      /* Texto sobre la pantalla en negro cuando el jugador se desmaya (lo maneja borrachera.js) */
+      #texto-desmayo {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: var(--texto-suave);
+        font-family: var(--fuente-titulo);
+        font-size: clamp(32px, 5vw, 56px);
+        letter-spacing: 4px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 1.5s; /* aparece y desaparece de a poco */
+      }
+
+      /* Desmayado no se ve ningún cartel ni la mira.
+         Usamos visibility porque cada cartel maneja su propio display. */
+      body.desmayado .cartel,
+      body.desmayado #mira {
+        visibility: hidden;
       }
     </style>
   </head>
@@ -410,8 +443,10 @@
         <div><kbd>Clic</kbd> tomar o comer</div>
         <div><kbd>M</kbd> silenciar el sonido</div>
         <div><kbd>G</kbd> grilla de horarios</div>
+        <div><kbd>T</kbd> adelantar a la próxima banda</div>
         <div><kbd>V</kbd> vista en tercera persona</div>
         <div><kbd>1</kbd><kbd>2</kbd> responder sí / no</div>
+        <div><kbd>B</kbd> bajar a la chica</div>
         <div>Dejá todo cerca de un escenario: llená el <b>aguante</b></div>
       </div>
       <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
@@ -449,6 +484,13 @@
 
     <!-- Diálogo de la chica que pide subirse a los hombros (lo completa chica.js) -->
     <div id="dialogo-chica" class="cartel"></div>
+
+    <!-- Lo que dice el que barre cuando el jugador se despierta (lo completa limpieza.js) -->
+    <div id="dialogo-limpieza" class="cartel"></div>
+
+    <!-- Borrachera: avisos y el texto del desmayo (los maneja borrachera.js) -->
+    <div id="aviso-borrachera" class="cartel"></div>
+    <div id="texto-desmayo">Horas después…</div>
 
     <!-- Three.js agrega el <canvas> automáticamente desde main.js -->
     <script type="module" src="/src/main.js"></script>
