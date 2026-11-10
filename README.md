@@ -10,6 +10,8 @@ Los pogos se arman como en un recital: unos segundos antes de que explote un tem
 
 Los fernets emborrachan: los colores y las luces se ponen más intensos y laten con la música, la vista se marea y el jugador contagia más al público. Con unos 5 fernets se desmaya y se despierta a la mañana siguiente, con el festival terminado y la gente limpiando el predio.
 
+Con la tecla X el jugador saca el celular y, con clic, saca fotos (verticales, con la banda y la hora); con la Z las ve en una galería. Pero ojo: si tiene el celular mucho tiempo afuera, sobre todo entre el público, en el pogo, borracho o de noche, aparece un ladrón con capucha que se le acerca por detrás. Si lo guarda a tiempo, el ladrón se va; si no, se lo roba y se pierden todas las fotos.
+
 Arriba a la izquierda hay un reloj con la hora del festival, y con la tecla G se abre la grilla con los horarios de cada escenario. El festival arranca a las 17:58 y el reloj corre 10 veces más rápido que el tiempo real (las 3 horas de la tarde duran 18 minutos de juego). En cada escenario tocan tres bandas, una después de la otra: cada una sube cuando llega su horario, toca un tema tranqui y uno para el pogo, y se baja. Entre banda y banda el cartel anuncia a la que sigue. A las 21:00, ya de noche, suben las bandas principales, que tocan sin parar. Cada banda tiene su look arriba del escenario, el nombre en el bombo, los trapos de sus fans en la valla y, las uruguayas, banderas de Uruguay en el público.
 
 Programación:
@@ -108,6 +110,9 @@ public/
 | V | Cambiar entre primera y tercera persona |
 | 1 / 2 | Responder que sí / que no (cuando la chica pide subirse a los hombros) |
 | B | Bajar a la chica de los hombros |
+| X | Sacar / guardar el celular (con la mano libre) |
+| Clic (con el celular afuera) | Sacar una foto |
+| Z | Abrir / cerrar la galería de fotos (← → para cambiar de foto) |
 | Esc o P | Pausa (se detiene la música y el público se congela) |
 | M | Silenciar / activar el sonido |
 | Clic | Entrar al juego / continuar después de la pausa |

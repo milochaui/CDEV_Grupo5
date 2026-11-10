@@ -32,6 +32,12 @@ const ANGULO_BOCA = -0.75;
 const COSTADO_BOCA = 0.52; // y hacia el centro de la pantalla
 const CABECEO_TRAGO = 0.3; // cuánto echa la cabeza para atrás al tomar (radianes, 0.3 ≈ 17°)
 
+// --- El celular en alto (ver celular.js) ---
+// El brazo derecho sube más que al sostener un vaso y se cierra hacia el centro de la
+// pantalla, como cuando uno filma un recital.
+const ANGULO_CELULAR = -0.8;
+const COSTADO_CELULAR = 0.3;
+
 // --- Salto ---
 // Con estos valores el salto sube unos 85 cm y dura unos 0.75 segundos.
 const VELOCIDAD_SALTO = 4.5; // metros por segundo hacia arriba al despegar
@@ -165,7 +171,8 @@ export function escenarioEntreElPublico(escenarios, posicion) {
  * @returns {{ actualizar: (delta: number) => void,
  *             estado: {brazos: boolean, cantando: boolean, pogo: boolean, saltando: boolean, enRonda: boolean},
  *             manoDerecha: THREE.Group,
- *             gesto: {boca: number, inclinacion: number, cabeza: number, vaso: boolean, desdeAfuera: boolean},
+ *             gesto: {boca: number, inclinacion: number, cabeza: number, vaso: boolean, celular: number,
+ *                     desdeAfuera: boolean},
  *             mirarHacia: (punto: THREE.Vector3) => void }}
  *  - estado dice qué está haciendo el jugador en este momento (lo usa aguante.js).
  *  - manoDerecha: lo que se agregue a este grupo aparece en la mano derecha (ver barra.js).
@@ -174,6 +181,7 @@ export function escenarioEntreElPublico(escenarios, posicion) {
  *      inclinacion: cuánto inclina el vaso hacia la cara (radianes).
  *      cabeza: de 0 a 1, cuánto echa la cabeza para atrás.
  *      vaso: si tiene un fernet en la mano (el cuerpo de tercera persona también lo muestra).
+ *    Y celular.js cambia celular: de 0 a 1, cuánto sube el celular (0 = guardado).
  *    Y terceraPersona.js cambia desdeAfuera: true si se está viendo el cuerpo desde atrás.
  *  - mirarHacia: da vuelta la cámara hacia un punto (la usa main.js al despertarse).
  */
@@ -194,7 +202,7 @@ export function crearAcciones({ camara, jugador, escenarios, borrachera }) {
   const manoDerecha = new THREE.Group();
   manoDerecha.position.y = LARGO_ANTEBRAZO + 0.06; // donde está la mano
   brazoDerecho.add(manoDerecha);
-  const gesto = { boca: 0, inclinacion: 0, cabeza: 0, vaso: false, desdeAfuera: false };
+  const gesto = { boca: 0, inclinacion: 0, cabeza: 0, vaso: false, celular: 0, desdeAfuera: false };
   // Los reusamos en cada cuadro para calcular cómo queda lo que tiene en la mano (paso 5).
   const giroEnMano = new THREE.Euler();
   const giroDeseado = new THREE.Quaternion();
@@ -379,14 +387,16 @@ export function crearAcciones({ camara, jugador, escenarios, borrachera }) {
     // El agite se suma igual a los dos: se mueven juntos de un lado al otro, como en los recitales.
     // rotation.set(adelante, 0, costado): x inclina hacia adelante, z hacia los costados.
     // El derecho, si tiene algo en la mano, sube un poco para que se vea (salvo que ya
-    // esté levantado con E). Y con gesto.boca se va hacia la cara.
+    // esté levantado con E). Con el celular sube más todavía, y con gesto.boca se va hacia la cara.
     const sostiene = manoDerecha.children.length > 0;
     let adelanteDerecho = anguloAdelante;
     if (sostiene) {
       adelanteDerecho += (ANGULO_SOSTENER - ANGULO_BRAZOS_REPOSO) * (1 - levantado);
     }
+    adelanteDerecho = mezclar(adelanteDerecho, ANGULO_CELULAR, gesto.celular);
     adelanteDerecho = mezclar(adelanteDerecho, ANGULO_BOCA, gesto.boca);
-    const costadoDerecho = mezclar(anguloCostado + agite, COSTADO_BOCA, gesto.boca);
+    let costadoDerecho = mezclar(anguloCostado + agite, COSTADO_CELULAR, gesto.celular);
+    costadoDerecho = mezclar(costadoDerecho, COSTADO_BOCA, gesto.boca);
     brazoDerecho.rotation.set(adelanteDerecho, 0, costadoDerecho);
     brazoIzquierdo.rotation.set(anguloAdelante, 0, -anguloCostado + agite);
     // Lo que tiene en la mano no gira con el brazo: queda derecho respecto de la cámara,

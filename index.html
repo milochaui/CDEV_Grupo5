@@ -234,6 +234,80 @@
         top: calc(50% + 84px);
         color: #ffd27a;
       }
+      /* Aviso del celular (lo completa celular.js), debajo del de la barra */
+      #aviso-celular {
+        display: none;
+        top: calc(50% + 128px);
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: pre; /* respeta los espacios entre las dos opciones */
+      }
+      /* Galería de fotos (la maneja galeria.js): al centro, como la grilla */
+      #galeria {
+        display: none; /* cerrada al empezar */
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px 24px;
+        background: rgba(12, 8, 30, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid var(--borde);
+        border-radius: 16px;
+        color: #fff;
+        font-family: var(--fuente-texto); /* la misma letra que los carteles */
+        text-align: center;
+      }
+      #galeria h2 {
+        margin: 0 0 14px;
+        font-family: var(--fuente-titulo);
+        font-weight: normal;
+        font-size: 30px;
+        letter-spacing: 2px;
+      }
+      #galeria-imagen {
+        display: block;
+        height: 62vh; /* las fotos son verticales: las medimos por el alto */
+        margin: 0 auto;
+        border-radius: 10px;
+      }
+      #galeria-vacia {
+        padding: 40px 30px;
+        white-space: pre-line; /* respeta los saltos de línea (\n) del texto */
+        color: var(--texto-suave);
+      }
+      #galeria-descripcion {
+        margin: 12px 0 2px;
+        font-size: 18px;
+        font-weight: bold;
+      }
+      #galeria-numero,
+      #galeria .ayuda {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: var(--texto-suave);
+      }
+
+      /* Aviso de que te quieren robar el celular (lo maneja robo.js): arriba de la mira */
+      #aviso-robo {
+        display: none;
+        top: calc(50% - 70px);
+        left: 50%;
+        transform: translateX(-50%);
+        color: #ff8a8a;
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      /* Flash de la foto: toda la pantalla en blanco (celular.js le cambia la opacidad) */
+      #flash-foto {
+        position: fixed;
+        inset: 0;
+        background: white;
+        opacity: 0;
+        pointer-events: none; /* que no tape los clics */
+      }
 
       /* Aguante-metro: abajo a la derecha (lo maneja aguante.js) */
       #aguante {
@@ -447,6 +521,8 @@
         <div><kbd>V</kbd> vista en tercera persona</div>
         <div><kbd>1</kbd><kbd>2</kbd> responder sí / no</div>
         <div><kbd>B</kbd> bajar a la chica</div>
+        <div><kbd>X</kbd> sacar / guardar el celu (clic: foto)</div>
+        <div><kbd>Z</kbd> ver las fotos</div>
         <div>Dejá todo cerca de un escenario: llená el <b>aguante</b></div>
       </div>
       <p class="entrar" id="texto-clic">Hacé clic para entrar</p>
@@ -467,6 +543,21 @@
 
     <!-- Aviso de la barra (lo completa barra.js) -->
     <div id="aviso-barra" class="cartel"></div>
+
+    <!-- Aviso del celular (lo completa celular.js) -->
+    <div id="aviso-celular" class="cartel"></div>
+    <div id="flash-foto"></div>
+    <div id="aviso-robo" class="cartel"></div>
+
+    <!-- Galería de fotos (la maneja galeria.js) -->
+    <div id="galeria">
+      <h2>📸 Mis fotos</h2>
+      <img id="galeria-imagen" alt="Foto del festival" />
+      <p id="galeria-vacia"></p>
+      <p id="galeria-descripcion"></p>
+      <p id="galeria-numero"></p>
+      <p class="ayuda">← → cambiar de foto · Z cerrar</p>
+    </div>
 
     <!-- Aguante-metro (lo completa aguante.js) -->
     <div id="aguante" class="cartel">

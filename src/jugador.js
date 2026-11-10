@@ -27,7 +27,7 @@ const RADIO_JUGADOR = 0.4;
  *             desplazar: (dx: number, dz: number) => void,
  *             acotarAlPredio: (posicion: THREE.Vector3, anteriorZ: number) => void,
  *             estaLibre: (x: number, z: number) => boolean,
- *             bloquear: (valor: boolean) => void, puedeActuar: () => boolean }}
+ *             bloquear: (motivo: string, valor: boolean) => void, puedeActuar: () => boolean }}
  */
 export function crearJugador(camara, elemento, opciones) {
   // PointerLockControls (viene con Three.js) se encarga de:
@@ -39,8 +39,11 @@ export function crearJugador(camara, elemento, opciones) {
 
   camara.position.y = ALTURA_OJOS;
 
-  // Desmayado (ver borrachera.js) el jugador no puede moverse, mirar ni hacer nada.
-  let bloqueado = false;
+  // Bloqueado, el jugador no puede moverse, mirar ni hacer nada. Lo pueden bloquear varias
+  // cosas a la vez (el desmayo en borrachera.js, la galería de fotos en galeria.js): por eso
+  // guardamos los motivos en un Set (una lista sin repetidos) y está bloqueado mientras
+  // quede alguno. Así, cerrar la galería no "despierta" a un jugador desmayado.
+  const motivosDeBloqueo = new Set();
 
   // --- Teclado ---
   // Guardamos qué teclas están apretadas en este momento.
@@ -126,17 +129,23 @@ export function crearJugador(camara, elemento, opciones) {
   }
 
   /**
-   * Bloquea o desbloquea al jugador. Bloqueado no camina ni gira con el mouse.
-   * @param {boolean} valor
+   * Bloquea o desbloquea al jugador por un motivo. Bloqueado no camina ni gira con el mouse.
+   * @param {string} motivo  Quién lo bloquea, por ejemplo 'desmayo' o 'galeria'
+   * @param {boolean} valor  true = bloquear, false = sacar ese motivo
    */
-  function bloquear(valor) {
-    bloqueado = valor;
-    controles.pointerSpeed = valor ? 0 : 1; // pointerSpeed: cuánto gira con el mouse
+  function bloquear(motivo, valor) {
+    if (valor) {
+      motivosDeBloqueo.add(motivo);
+    } else {
+      motivosDeBloqueo.delete(motivo);
+    }
+    // pointerSpeed: cuánto gira con el mouse (0 = no gira)
+    controles.pointerSpeed = motivosDeBloqueo.size > 0 ? 0 : 1;
   }
 
   // true si el jugador puede hacer cosas: está jugando (no en pausa) y no está desmayado.
   function puedeActuar() {
-    return controles.isLocked && !bloqueado;
+    return controles.isLocked && motivosDeBloqueo.size === 0;
   }
 
   /**

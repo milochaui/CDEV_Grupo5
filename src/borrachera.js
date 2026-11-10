@@ -250,7 +250,7 @@ export function crearBorrachera({ camara, jugador, oyente, pasada, bloom, escena
 
   function empezarACaer() {
     cambiarEstado('cayendo');
-    jugador.bloquear(true);
+    jugador.bloquear('desmayo', true);
     aviso.style.display = 'none';
     finDeAviso = 0;
     // Esta clase esconde los carteles de la pantalla (ver index.html).
@@ -301,7 +301,7 @@ export function crearBorrachera({ camara, jugador, oyente, pasada, bloom, escena
 
     if (avance >= 1) {
       cambiarEstado('normal');
-      jugador.bloquear(false);
+      jugador.bloquear('desmayo', false);
     }
   }
 

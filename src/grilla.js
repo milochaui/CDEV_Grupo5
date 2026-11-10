@@ -37,7 +37,8 @@ export function aMinutos(textoHora) {
 
 // Lo contrario: 1280 → "21:20". padStart agrega el 0 de adelante ("9" → "09").
 // El % 24 hace que después de las 23:59 vuelva a las 00:00.
-function aTextoHora(minutosTotales) {
+// La exportamos porque la usan también las fotos del celular (ver main.js).
+export function aTextoHora(minutosTotales) {
   const horas = Math.floor(minutosTotales / 60) % 24;
   const minutos = Math.floor(minutosTotales % 60);
   return String(horas).padStart(2, '0') + ':' + String(minutos).padStart(2, '0');

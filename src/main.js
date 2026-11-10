@@ -15,12 +15,15 @@ import { crearBorrachera, crearPasadaBorrachera } from './borrachera.js';
 import { crearLimpieza } from './limpieza.js';
 import { crearBarra, crearPedidos } from './barra.js';
 import { crearPiso, crearBanderines } from './predio.js';
-import { crearGrilla } from './grilla.js';
+import { crearGrilla, aTextoHora } from './grilla.js';
 import { crearChica } from './chica.js';
 import { crearGenteDelMedio } from './gente.js';
 import { crearVallas } from './vallas.js';
 import { crearPortal } from './portal.js';
 import { crearTerceraPersona } from './terceraPersona.js';
+import { crearCelular } from './celular.js';
+import { crearGaleria } from './galeria.js';
+import { crearRobo } from './robo.js';
 
 // --- Escena ---
 // La escena es el "mundo" donde ponemos todos los objetos 3D.
@@ -372,10 +375,30 @@ const aguante = crearAguanteMetro({ acciones, escenarioMasFuerte, borrachera });
 // --- Pedidos en la barra (fernet y choripán en la mano) ---
 const pedidos = crearPedidos({ barra, acciones, jugador, camara, borrachera });
 
+// --- Celular (tecla X): lo saca o lo guarda, con la mano libre. Con clic saca fotos ---
+// Abajo de cada foto va la banda que más se escucha y la hora del festival.
+function describirFoto() {
+  const masFuerte = escenarioMasFuerte();
+  const lugar = masFuerte !== null ? masFuerte.userData.nombre : 'Salve Salve Rockanrol';
+  return lugar + ' · ' + aTextoHora(grilla.minutos());
+}
+const celular = crearCelular({ acciones, jugador, camara, oyente, describirFoto });
+
+// --- Galería de fotos (tecla Z) ---
+const galeria = crearGaleria({ jugador, celular });
+
 // --- Reloj del festival y grilla de horarios (tecla G) ---
 // El reloj manda: con su hora cada escenario sube a la banda que toca y el cielo oscurece.
 const grilla = crearGrilla(jugador, escenarios);
 cielo.actualizar(grilla.minutos()); // el cielo arranca con la hora del reloj
+
+// --- Robo del celular (si lo tenés mucho tiempo afuera) ---
+// Si llega a ser alto, aparece un ladrón que se te acerca (ver robo.js y ladron.js).
+// Si te roba mientras mirás las fotos, la galería se cierra: ya no tenés el celular.
+const robo = crearRobo({
+  escena, celular, acciones, borrachera, grilla, escenarios, camara, jugador,
+  alRobar: () => galeria.cerrar(),
+});
 
 // --- Vista en tercera persona (tecla V) ---
 // El cuerpo del jugador y una cámara que lo filma desde atrás.
@@ -397,8 +420,10 @@ const HORA_AL_DESPERTAR = (24 + 7) * 60; // 07:00
 // la vista pasa a primera persona (la caída se ve desde sus ojos).
 function alCaer() {
   pedidos.soltar();
+  celular.soltar();
   chica.irse();
   grilla.cerrar();
+  galeria.cerrar();
   terceraPersona.verEnPrimeraPersona();
 }
 
@@ -565,6 +590,7 @@ function animar(tiempo) {
   const enPausa = !jugador.controles.isLocked;
   if (!enPausa) {
     pedidos.actualizar(delta); // antes que acciones: cambia el gesto de llevar a la boca
+    celular.actualizar(delta); // también antes que acciones: cambia el gesto de subir el celular
     borrachera.actualizar(delta); // también antes que acciones: cambia el mareo de la cámara
     acciones.actualizar(delta);
     grilla.actualizar(delta); // avanza el reloj...
@@ -574,6 +600,7 @@ function animar(tiempo) {
       escenario.userData.programacion.actualizar(grilla.minutos());
     }
     chica.actualizar(delta);
+    robo.actualizar(delta);
     genteDelMedio.actualizar(delta);
     limpieza.actualizar(delta);
   }
@@ -614,6 +641,16 @@ function animar(tiempo) {
 
   // Cuerpo del jugador y cámara de tercera persona (también en pausa: así la vista no se rompe).
   terceraPersona.actualizar(delta);
+
+  // Foto con el celular: si el jugador hizo clic, primero dibujamos el cuadro con la cámara
+  // de la foto (desde sus ojos, sin brazos ni celular) y lo copiamos. Enseguida lo tapa el
+  // cuadro normal, así que en la pantalla no se llega a ver.
+  const camaraFoto = celular.camaraParaFoto();
+  if (camaraFoto !== null) {
+    pasadaEscena.camera = camaraFoto;
+    composer.render(delta);
+    celular.guardarFoto(renderer.domElement);
+  }
 
   // Dibujamos el cuadro con la cámara de la vista elegida (primera o tercera persona).
   pasadaEscena.camera = terceraPersona.camaraActiva();

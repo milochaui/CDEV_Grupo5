@@ -27,6 +27,7 @@ import {
   BRAZOS_AGARRAN_ADENTRO,
 } from './publico.js';
 import { crearRemeras, COLOR_REMERA } from './remeras.js';
+import { crearCelularDelCuerpo } from './celular.js';
 
 // ---------------------------------------------------------------------------
 // Constantes para ajustar
@@ -53,6 +54,11 @@ const BRAZO_EN_LA_BOCA = -1.95;
 const COSTADO_EN_LA_BOCA = 0.35; // el brazo se cierra hacia la cara
 const INCLINACION_VASO = 0.9; // cuánto se inclina el vaso hacia la cara (radianes)
 const CABEZA_PARA_ATRAS = 0.45; // radianes
+
+// --- El celular en alto (ver gesto.celular en acciones.js) ---
+// Lo levanta por encima de la cabeza, como en los recitales (así, desde atrás, se ve la pantalla).
+const BRAZO_CON_CELULAR = -2.4; // adelante y hacia arriba
+const COSTADO_CON_CELULAR = 0.15; // el brazo se cierra un poco hacia el centro
 
 // Mezcla dos valores: con t = 0 da a, con t = 1 da b (igual que en publico.js).
 function mezclar(a, b, t) {
@@ -99,6 +105,12 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
   vaso.position.y = -LARGO_BRAZO - 0.05;
   vaso.visible = false;
   brazoDer.add(vaso);
+
+  // El celular, también en la mano derecha. Solo se ve mientras lo tiene afuera.
+  const celular = crearCelularDelCuerpo();
+  celular.position.y = -LARGO_BRAZO - 0.06;
+  celular.visible = false;
+  brazoDer.add(celular);
 
   // Sombra en el piso, como la del público.
   const sombra = new THREE.Mesh(geometriaSombra, materialSombra);
@@ -189,7 +201,13 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
       adelanteDerecho = mezclar(mezclar(BRAZO_SOSTIENE_VASO, adelante, levantado), BRAZO_EN_LA_BOCA, gesto.boca);
       costadoDerecho = mezclar(costadoDerecho, COSTADO_EN_LA_BOCA, gesto.boca);
     }
+    // Con el celular, el brazo lo sube delante de la cara (pasa de a poco, con gesto.celular).
+    adelanteDerecho = mezclar(adelanteDerecho, BRAZO_CON_CELULAR, gesto.celular);
+    costadoDerecho = mezclar(costadoDerecho, COSTADO_CON_CELULAR, gesto.celular);
     brazoDer.rotation.set(adelanteDerecho, 0, costadoDerecho);
+    // El celular queda derecho (como el vaso), con la pantalla hacia la cara.
+    celular.visible = gesto.celular > 0;
+    celular.rotation.x = -adelanteDerecho;
     // El vaso queda derecho (lo giramos al revés que el brazo) y se inclina al tomar.
     vaso.visible = gesto.vaso;
     vaso.rotation.x = -adelanteDerecho - gesto.boca * INCLINACION_VASO;

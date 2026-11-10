@@ -221,7 +221,8 @@ function crearMaterialEnMano(color) {
 
 // Crea una pieza para la mano. "orden" es su renderOrder: como no se fijan quién está delante
 // (depthTest: false), se dibujan en este orden, después de los brazos (100 y 101).
-function piezaEnMano(geometria, color, orden = 102, opacidad = 1) {
+// La exportamos porque el celular (ver celular.js) también la usa.
+export function piezaEnMano(geometria, color, orden = 102, opacidad = 1) {
   const malla = new THREE.Mesh(geometria, crearMaterialEnMano(color));
   malla.material.opacity = opacidad;
   malla.renderOrder = orden;
@@ -392,6 +393,12 @@ export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
     }
   }
 
+  // ¿Tiene en la mano algo que no le dimos nosotros? (el celular, ver celular.js)
+  // Con el celular en la mano no se puede pedir: primero lo tiene que guardar.
+  function tieneElCelular() {
+    return enMano === null && acciones.manoDerecha.children.length > 0;
+  }
+
   // La mano y la cabeza vuelven a su lugar.
   function terminarGesto() {
     tiempoBocado = -1;
@@ -423,7 +430,7 @@ export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (!jugador.puedeActuar() || !cerca || cerrada || tiempoBocado >= 0) {
+    if (!jugador.puedeActuar() || !cerca || cerrada || tiempoBocado >= 0 || tieneElCelular()) {
       return;
     }
     if (event.code === TECLA_FERNET) pedir('fernet');
@@ -525,6 +532,8 @@ export function crearPedidos({ barra, acciones, jugador, camara, borrachera }) {
     let texto = '';
     if (cerca && cerrada) {
       texto = 'La barra está cerrada';
+    } else if (cerca && tieneElCelular()) {
+      texto = 'Guardá el celu (X) para pedir';
     } else if (cerca) {
       texto = 'R: pedir un fernet   ·   C: pedir un choripán';
     } else if (enMano !== null) {
