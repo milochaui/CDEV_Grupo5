@@ -5,6 +5,8 @@
 //  - Palmas: cientos de golpecitos de ruido muy cortos, cada uno con un filtro distinto.
 //  - Grito de la multitud: ruido largo con un filtro que va cambiando ("uuuuh-aaah").
 //  - Silbidos: tonos agudos que suben y bajan.
+//  - Abucheo (cuando al público no le gustó el tema): un murmullo grave y muchas voces
+//    que hacen "buuuu", más silbidos.
 // El sonido sale de en medio del público y baja con la distancia igual que la música.
 import * as THREE from 'three';
 
@@ -17,6 +19,13 @@ const VOLUMEN_PALMAS = 0.5;
 const VOLUMEN_GRITO = 0.35;
 const VOLUMEN_SILBIDOS = 0.06;
 const CANTIDAD_SILBIDOS = 5; // con un tema conocido
+
+// --- Abucheo ---
+const DURACION_ABUCHEO = 7; // segundos
+const VOLUMEN_MURMULLO = 0.3; // el "uuuuh" de fondo de toda la gente junta
+const VOLUMEN_VOZ_ABUCHEO = 0.05; // cada "buuu" suelto
+const VOCES_ABUCHEO = 24; // cuántos "buuu" sueltos se escuchan por encima del murmullo
+const SILBIDOS_ABUCHEO = 8; // acá los silbidos son de bronca
 
 // Mezcla dos valores: con t = 0 da a, con t = 1 da b, y en el medio, algo intermedio.
 function mezclar(a, b, t) {
@@ -39,7 +48,7 @@ function forma(u) {
  * Crea los aplausos de un escenario.
  *
  * @param {THREE.AudioListener} oyente  Los "oídos" del jugador
- * @returns {{ sonido: THREE.PositionalAudio, aplaudir: (intensidad: number) => void,
+ * @returns {{ sonido: THREE.PositionalAudio, aplaudir: (intensidad: number) => void, abuchear: () => void,
  *             actualizarVolumen: (volumen: number) => void, intensidad: () => number }}
  */
 export function crearAplausos(oyente) {
@@ -135,6 +144,89 @@ export function crearAplausos(oyente) {
     oscilador.stop(momento + 0.65);
   }
 
+  // El murmullo del abucheo: ruido muy filtrado, solo los graves, que suena a "uuuuh".
+  function murmullo(ahora) {
+    const fuente = contexto.createBufferSource();
+    fuente.buffer = ruido;
+    fuente.loop = true;
+
+    const filtro = contexto.createBiquadFilter();
+    filtro.type = 'bandpass';
+    filtro.Q.value = 1.2;
+    // Cae un poco al final, como cuando se les acaba el aire.
+    filtro.frequency.setValueAtTime(320, ahora);
+    filtro.frequency.linearRampToValueAtTime(240, ahora + DURACION_ABUCHEO);
+
+    const volumen = contexto.createGain();
+    volumen.gain.setValueAtTime(0, ahora);
+    volumen.gain.linearRampToValueAtTime(VOLUMEN_MURMULLO, ahora + 0.8);
+    volumen.gain.linearRampToValueAtTime(VOLUMEN_MURMULLO * 0.7, ahora + DURACION_ABUCHEO * 0.7);
+    volumen.gain.linearRampToValueAtTime(0, ahora + DURACION_ABUCHEO);
+
+    fuente.connect(filtro);
+    filtro.connect(volumen);
+    volumen.connect(entrada);
+    fuente.start(ahora);
+    fuente.stop(ahora + DURACION_ABUCHEO);
+  }
+
+  // Una voz que abuchea: "buuuu". Es una onda "diente de sierra" (suena áspera, como una
+  // voz) con un filtro que le saca los agudos: así queda una "u" grave. La nota baja un
+  // poco al final y tiembla un poquito (vibrato), como una voz de verdad.
+  function vozAbucheo(momento) {
+    const largo = mezclar(1.2, 2.8, Math.random()); // segundos que dura el "buuu"
+    const nota = mezclar(100, 220, Math.random()); // voces más graves y más agudas
+
+    const oscilador = contexto.createOscillator();
+    oscilador.type = 'sawtooth';
+    oscilador.frequency.setValueAtTime(nota, momento);
+    oscilador.frequency.linearRampToValueAtTime(nota * 0.85, momento + largo);
+
+    // Vibrato: otro oscilador, lento (5 veces por segundo), que mueve la nota ±3 Hz.
+    const vibrato = contexto.createOscillator();
+    vibrato.frequency.value = mezclar(4, 6, Math.random());
+    const cuantoVibrato = contexto.createGain();
+    cuantoVibrato.gain.value = 3;
+    vibrato.connect(cuantoVibrato);
+    cuantoVibrato.connect(oscilador.frequency);
+
+    const filtro = contexto.createBiquadFilter();
+    filtro.type = 'lowpass';
+    filtro.frequency.value = 450; // deja solo los graves: "u"
+    filtro.Q.value = 2;
+
+    // La "b": arranca de golpe. Después se sostiene y se apaga al final.
+    const volumen = contexto.createGain();
+    volumen.gain.setValueAtTime(0, momento);
+    volumen.gain.linearRampToValueAtTime(VOLUMEN_VOZ_ABUCHEO, momento + 0.08);
+    volumen.gain.linearRampToValueAtTime(VOLUMEN_VOZ_ABUCHEO * 0.8, momento + largo * 0.7);
+    volumen.gain.linearRampToValueAtTime(0, momento + largo);
+
+    oscilador.connect(filtro);
+    filtro.connect(volumen);
+    volumen.connect(entrada);
+    oscilador.start(momento);
+    vibrato.start(momento);
+    oscilador.stop(momento + largo);
+    vibrato.stop(momento + largo);
+  }
+
+  /**
+   * Arranca un abucheo: el público no quedó contento con el tema.
+   * No cuenta como ovación: intensidad() no cambia, así que nadie levanta los brazos.
+   */
+  function abuchear() {
+    const ahora = contexto.currentTime;
+    murmullo(ahora);
+    // Los "buuu" sueltos arrancan en cualquier momento de la primera parte del abucheo.
+    for (let i = 0; i < VOCES_ABUCHEO; i++) {
+      vozAbucheo(ahora + Math.random() * DURACION_ABUCHEO * 0.6);
+    }
+    for (let i = 0; i < SILBIDOS_ABUCHEO; i++) {
+      silbido(ahora + Math.random() * DURACION_ABUCHEO * 0.7);
+    }
+  }
+
   /**
    * Arranca una ovación.
    * @param {number} intensidad  De 0 a 1: con 1 (tema conocido) es más larga y más fuerte
@@ -173,5 +265,5 @@ export function crearAplausos(oyente) {
     return forma((contexto.currentTime - inicio) / duracion) * fuerza;
   }
 
-  return { sonido, aplaudir, actualizarVolumen, intensidad };
+  return { sonido, aplaudir, abuchear, actualizarVolumen, intensidad };
 }

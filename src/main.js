@@ -308,7 +308,10 @@ const escenarios = [
 // --- La carpa: un escenario chico e íntimo, para artistas más de nicho (ver carpa.js) ---
 // En la esquina entre el Escenario Rojo y el Ámbar, con la entrada mirando al centro.
 // Se suma a la lista de escenarios: así tiene grilla, aguante, chica, robo, etc., como los demás.
-// Lean Dotta, Pepi y Manu, y el Colo no tienen booms: no se arma la ronda de pogo grande.
+// Pepi y Manu, y el Colo no tienen booms: no se arma la ronda de pogo grande.
+// Lean Dotta sí: con Superestrella la carpa explota (ver sus temas más abajo).
+// abucheo: true (solo en la carpa): al terminar el tema, en vez de aplaudir, el público
+// abuchea y le tira tomates a la banda (ver tomates.js).
 const POSICION_CARPA = { x: -82, z: -62 };
 const carpa = crearCarpa({
   posicion: POSICION_CARPA,
@@ -321,8 +324,17 @@ const carpa = crearCarpa({
       inicio: '18:30',
       fin: '19:40',
       temas: [
-        { archivo: 'leandotta_tranqui_comoeranlascosas.mp3', titulo: 'Cómo eran las cosas', conocido: false },
-        { archivo: 'leandotta_conocido_superestrella.mp3', titulo: 'Superestrella (versión cuarteto)', conocido: true },
+        // Obsesionario: al público no le gusta. Al terminar, abucheo y tomates.
+        { archivo: 'leandotta_tranqui_obsesionarioenlamayor.mp3', titulo: 'Obsesionario en La mayor', conocido: false, abucheo: true },
+        // Superestrella: se prenden todos al baile y al pogo. Los booms van cada 20 segundos
+        // (el tema dura 2:28), y como cada pogo dura 25 (ver ronda.js), la ronda no se cierra
+        // en todo el tema. Si se quiere que explote en momentos justos, se cambian los números.
+        {
+          archivo: 'leandotta_conocido_superestrella.mp3',
+          titulo: 'Superestrella (versión cuarteto)',
+          conocido: true,
+          booms: [10, 30, 50, 70, 90, 110, 130],
+        },
       ],
       trapos: ['LEAN DOTTA', 'CUARTETO PA TODOS', 'SUPERESTRELLA'],
     },
@@ -330,10 +342,16 @@ const carpa = crearCarpa({
       banda: 'mv',
       nombre: 'Pepi Gabrielli y Manu Viale',
       inicio: '19:55',
-      fin: '21:05',
-      // Los temas todavía no están definidos: cuando estén, se cambian el título y el archivo.
+      // Su set dura unos 90 minutos del festival (con el reloj a 10 minutos por minuto real):
+      // Memorias (2:16) + Loca (2:30) + el tema 2, que mientras falte el mp3 ocupa 4 minutos
+      // en silencio (ver SEGUNDOS_SIN_AUDIO en musica.js), más los silencios entre temas.
+      fin: '21:25',
+      // El tema conocido todavía no está definido: cuando esté, se cambian el título y el archivo.
       temas: [
-        { archivo: 'mv_tranqui_tema1.mp3', titulo: 'Tema 1 (a definir)', conocido: false },
+        { archivo: 'pepi_tranqui_memoriasdelolvido.mp3', titulo: 'Memorias del olvido (No Te Va Gustar)', conocido: false },
+        // Loca: el tema de Manu. Pepi se corre atrás a un costado y Manu pasa adelante con la
+        // guitarra (ver manuAdelante en crearBanda, en artistas.js).
+        { archivo: 'mv_tranqui_loca.mp3', titulo: 'Loca', conocido: false, manuAdelante: true },
         { archivo: 'mv_conocido_tema2.mp3', titulo: 'Tema 2 (a definir)', conocido: true },
       ],
       trapos: ['PEPI Y MANU', 'SUFRIR TAMBIÉN ES ROCK', 'AGUANTE EL MULLET', 'MV'],
@@ -341,11 +359,12 @@ const carpa = crearCarpa({
     {
       banda: 'colo',
       nombre: 'Colo Giub',
-      inicio: '21:15',
-      fin: '23:15',
+      // Sube cuando terminan Pepi y Manu (más los 2 minutos en que el público pide el bis).
+      inicio: '21:30',
+      fin: '23:30',
+      // Un solo tema (3:16). Como cierra la noche, lo repite sin parar (ver escenario.js).
       temas: [
-        { archivo: 'colo_tranqui_senorita.mp3', titulo: 'Señorita (Ricardo Arjona)', conocido: false },
-        { archivo: 'colo_conocido_doctoraii.mp3', titulo: 'Doctora II (Piti Fernández)', conocido: true },
+        { archivo: 'cologiub_tranqui_doctora2.mp3', titulo: 'Doctora II (Piti Fernández)', conocido: false },
       ],
       trapos: ['COLO GIUB', 'COLORADO PRESENTE', 'DOCTORA II', 'FUERZA COLO'],
     },
@@ -688,6 +707,10 @@ function animar(tiempo) {
       escenario.userData.banda.actualizar(delta);
       escenario.userData.luces.actualizar(delta);
       escenario.userData.fuegos.actualizar(delta);
+      // Solo la carpa tiene tomates: en los demás escenarios userData.tomates no existe.
+      if (escenario.userData.tomates) {
+        escenario.userData.tomates.actualizar(delta);
+      }
     }
   }
   actualizarIndicador();

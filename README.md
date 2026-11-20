@@ -24,13 +24,13 @@ Programación:
 
 En el show de Callejeros no hay fuegos artificiales, por respeto a las víctimas de Cromañón.
 
-Además de los tres escenarios hay **La Carpita** (nombre provisorio, se cambia en `NOMBRE_CARPA` de `src/carpa.js`): una carpa de lona a rayas en la esquina entre el Escenario Rojo y el Ámbar, como la Casita del Blues del Cosquín Rock. Adentro hay un escenario chico con alfombra, telón, velador y amplificadores, guirnaldas de lamparitas que laten con la música, una bola de espejos que gira más rápido con los temas conocidos y fardos de paja para sentarse. El público es más chico pero más apretado. Desde afuera la música de la carpa se escucha apagada, y desde adentro, la de los escenarios grandes (como detrás de una lona). Arriba de la entrada, una marquesina con lamparitas anuncia quién toca.
+Además de los tres escenarios hay **La Carpita** (nombre provisorio, se cambia en `NOMBRE_CARPA` de `src/carpa.js`): una carpa de lona a rayas en la esquina entre el Escenario Rojo y el Ámbar, como la Casita del Blues del Cosquín Rock. Adentro hay un escenario chico con alfombra, telón, velador y amplificadores, guirnaldas de lamparitas que laten con la música, una bola de espejos que gira más rápido con los temas conocidos y fardos de paja para sentarse. El público es más chico pero más apretado. Desde afuera la música de la carpa se escucha apagada, y desde adentro, la de los escenarios grandes (como detrás de una lona). Arriba de la entrada, una marquesina con lamparitas anuncia quién toca. A Lean Dotta le va mal con el primer tema (*Obsesionario en La mayor*): al terminar, el público lo abuchea y le tira tomates, que quedan reventados en la tarima. Con el segundo (*Superestrella*) la carpa se prende fuego: pogo y baile durante todo el tema.
 
 | Hora | La Carpita |
 |---|---|
 | 18:30 | Lean Dotta (cuarteto, con tecladista y bajista) |
 | 19:55 | Pepi Gabrielli (voz) y Manu Viale (guitarra) |
-| 21:15 | **Colo Giub** (guitarra y voz), cierra la noche |
+| 21:30 | **Colo Giub** (guitarra y voz), cierra la noche |
 
 ## Tecnología
 
@@ -76,14 +76,14 @@ Los mp3 están en el repositorio, en `public/audio/`. Cada archivo tiene que lla
 | Andrés Calamaro | `calamaro_conocido_sindocumentos.mp3` | Sin documentos |
 | Andrés Calamaro | `calamaro_medio_todaviaunacanciondeamor.mp3` | Todavía una canción de amor |
 | Andrés Calamaro | `calamaro_tranqui_buenasuerteyhastaluego.mp3` | Buena suerte y hasta luego |
-| Lean Dotta (carpa) | `leandotta_tranqui_comoeranlascosas.mp3` | Cómo eran las cosas |
+| Lean Dotta (carpa) | `leandotta_tranqui_obsesionarioenlamayor.mp3` | Obsesionario en La mayor |
 | Lean Dotta (carpa) | `leandotta_conocido_superestrella.mp3` | Superestrella (versión cuarteto) |
-| Pepi y Manu (carpa) | `mv_tranqui_tema1.mp3` | A definir |
+| Pepi y Manu (carpa) | `pepi_tranqui_memoriasdelolvido.mp3` | Memorias del olvido (No Te Va Gustar) |
+| Pepi y Manu (carpa) | `mv_tranqui_loca.mp3` | Loca (Manu pasa adelante) |
 | Pepi y Manu (carpa) | `mv_conocido_tema2.mp3` | A definir |
-| Colo Giub (carpa) | `colo_tranqui_senorita.mp3` | Señorita (Ricardo Arjona) |
-| Colo Giub (carpa) | `colo_conocido_doctoraii.mp3` | Doctora II (Piti Fernández) |
+| Colo Giub (carpa) | `cologiub_tranqui_doctora2.mp3` | Doctora II (Piti Fernández) |
 
-**Pendiente:** todavía faltan los seis mp3 de la carpa, y los dos temas de Pepi y Manu no están definidos (cuando estén, se cambian el título y el archivo en `src/main.js`). En la carpeta también está `ciro_tranqui_servidor.mp3`, que hoy no se usa.
+**Pendiente:** el tema conocido de Pepi y Manu todavía no está definido ni tiene mp3 (cuando esté, se cambian el título y el archivo en `src/main.js`). En la carpeta también está `ciro_tranqui_servidor.mp3`, que hoy no se usa.
 
 ## Controles
 
@@ -129,6 +129,7 @@ Los mp3 están en el repositorio, en `public/audio/`. Cada archivo tiene que lla
 - `src/pantalla.js`: pantalla en vivo que filma a la banda.
 - `src/fuegos.js`: fuegos artificiales al terminar los temas conocidos.
 - `src/papelitos.js`: los papelitos que vuelan sobre el público cuando explota un tema.
+- `src/tomates.js`: los tomates que el público le tira a la banda cuando la abuchea (en la carpa).
 - `src/aplausos.js`: aplausos y gritos sintetizados al terminar cada tema.
 - `src/cielo.js`: cielo del atardecer a la noche (sigue la hora del reloj), con sol y estrellas.
 - `src/predio.js`: piso del predio (pasto, tierra pisada y caminos) y guirnaldas de banderines.

@@ -12,6 +12,7 @@ import { crearMusica } from './musica.js';
 import { crearPublico } from './publico.js';
 import { crearBanda } from './artistas.js';
 import { crearAplausos } from './aplausos.js';
+import { crearTomates } from './tomates.js';
 import { crearProgramacion, crearMaterialTrapo, DISENOS_TRAPO } from './escenario.js';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,7 @@ const ALTO_TARIMA = 0.8;
 const Z_FONDO_TARIMA = -LARGO / 2 + 0.4; // casi contra la pared del fondo
 const Z_FRENTE_TARIMA = Z_FONDO_TARIMA + PROFUNDIDAD_TARIMA;
 const Z_BANDA = Z_FONDO_TARIMA + 0.6; // dónde va el "cero" de la banda (el cantante queda más adelante)
+const Z_CANTANTE = Z_BANDA + 2.8; // dónde está parado el cantante (como Z_CANTANTE en artistas.js)
 
 // --- Público: menos gente que en los escenarios grandes, pero más apretada ---
 const FORMA_PUBLICO = {
@@ -109,15 +111,32 @@ export function crearCarpa(config) {
   aplausos.sonido.position.set(0, 2, 2);
   carpa.add(aplausos.sonido);
   carpa.userData.aplausos = aplausos;
-  musica.alTerminarTema((tema) => {
-    aplausos.aplaudir(tema.conocido ? 1 : 0.5);
-  });
 
   // Público: desde el frente de la tarima hacia la entrada.
   const publico = crearPublico(musica, aplausos, FORMA_PUBLICO);
   publico.grupo.position.z = Z_FRENTE_TARIMA;
   carpa.add(publico.grupo);
   carpa.userData.publico = publico;
+
+  // Tomates para cuando el público abuchea (ver tomates.js). Van en el grupo del público,
+  // así que el cantante y la tarima se miden desde el frente de la tarima (Z_FRENTE_TARIMA).
+  const tomates = crearTomates({
+    alturaTarima: ALTO_TARIMA,
+    cantante: { x: 0, z: Z_CANTANTE - Z_FRENTE_TARIMA },
+  });
+  publico.grupo.add(tomates.malla);
+  carpa.userData.tomates = tomates;
+
+  // Al terminar cada tema: si el tema tiene abucheo: true (ver main.js), el público
+  // abuchea y le tira tomates a la banda; si no, aplaude (más fuerte con los conocidos).
+  musica.alTerminarTema((tema) => {
+    if (tema.abucheo) {
+      aplausos.abuchear();
+      tomates.tirar();
+    } else {
+      aplausos.aplaudir(tema.conocido ? 1 : 0.5);
+    }
+  });
 
   // Una banda (con sus trapos) por cada show, como en escenario.js.
   const shows = config.lineup.map((datos) => {

@@ -173,7 +173,7 @@ export function escenarioEntreElPublico(escenarios, posicion) {
  *             manoDerecha: THREE.Group,
  *             gesto: {boca: number, inclinacion: number, cabeza: number, vaso: boolean, celular: number,
  *                     desdeAfuera: boolean},
- *             mirarHacia: (punto: THREE.Vector3) => void }}
+ *             mirarHacia: (punto: THREE.Vector3) => void, cuantoPogo: () => number }}
  *  - estado dice qué está haciendo el jugador en este momento (lo usa aguante.js).
  *  - manoDerecha: lo que se agregue a este grupo aparece en la mano derecha (ver barra.js).
  *  - gesto: cómo está tomando o comiendo. Lo cambia barra.js:
@@ -369,7 +369,10 @@ export function crearAcciones({ camara, jugador, escenarios, borrachera }) {
     // (ver terceraPersona.js): si inclináramos la cámara, esa vista se movería de golpe.
     const mareo = borrachera.mareo;
     const cabeceo = gesto.desdeAfuera ? 0 : gesto.cabeza * CABECEO_TRAGO;
-    camara.position.y = ALTURA_OJOS + alturaSalto + rebote + mareo.altura;
+    // El rebote del pogo tampoco: desde afuera salta el cuerpo (ver terceraPersona.js). Si
+    // rebotara la cámara, la de tercera persona (que la sigue) rebotaría junto con el cuerpo.
+    const reboteCamara = gesto.desdeAfuera ? 0 : rebote;
+    camara.position.y = ALTURA_OJOS + alturaSalto + reboteCamara + mareo.altura;
     inclinarCamara(INCLINACION_CANTAR * cantar + mareo.inclinacion + cabeceo, ladeo + mareo.costado);
 
     // --- 5. Brazos ---
@@ -455,5 +458,11 @@ export function crearAcciones({ camara, jugador, escenarios, borrachera }) {
     mostrar(avisoPogo, textoPogo);
   }
 
-  return { actualizar, estado, manoDerecha, gesto, mirarHacia };
+  // Cuánto se nota el pogo ahora, de 0 (nada) a 1 (a full). Lo usa el cuerpo de tercera
+  // persona (ver terceraPersona.js) para saltar y sacudir los brazos.
+  function cuantoPogo() {
+    return pogo;
+  }
+
+  return { actualizar, estado, manoDerecha, gesto, mirarHacia, cuantoPogo };
 }

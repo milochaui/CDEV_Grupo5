@@ -60,6 +60,14 @@ const CABEZA_PARA_ATRAS = 0.45; // radianes
 const BRAZO_CON_CELULAR = -2.4; // adelante y hacia arriba
 const COSTADO_CON_CELULAR = 0.15; // el brazo se cierra un poco hacia el centro
 
+// --- Pogo (F): el cuerpo hace lo mismo que los pogueros del público (ver publico.js y ronda.js) ---
+const SALTO_POGO = 0.35; // metros: saltitos seguidos
+const SALTOS_POGO_POR_SEGUNDO = 1.5;
+const LADEO_POGO = 0.25; // radianes que se ladea de costado (0.25 ≈ 14°)
+const ANGULO_BRAZOS_POGO = 1.1; // los brazos a media altura...
+const SACUDIDA_BRAZOS_POGO = 0.9; // ...que se sacuden para arriba y para abajo (radianes)
+const SACUDIDAS_BRAZOS_POR_SEGUNDO = 1.6;
+
 // Mezcla dos valores: con t = 0 da a, con t = 1 da b (igual que en publico.js).
 function mezclar(a, b, t) {
   return a + (b - a) * t;
@@ -73,7 +81,7 @@ function mezclar(a, b, t) {
  * @param {THREE.PerspectiveCamera} opciones.camara  La cámara del jugador (primera persona)
  * @param {object} opciones.jugador  Lo que devuelve crearJugador (para saber si se está jugando
  *        y para no sacar la cámara del predio)
- * @param {object} opciones.acciones  Lo que devuelve crearAcciones (para levantar los brazos)
+ * @param {object} opciones.acciones  Lo que devuelve crearAcciones (para levantar los brazos y el pogo)
  * @returns {{ actualizar: (delta: number) => void, camaraActiva: () => THREE.PerspectiveCamera,
  *             hombros: THREE.Object3D, verEnPrimeraPersona: () => void }}
  *          hombros: donde se sienta alguien que va subido (lo usa chica.js)
@@ -151,6 +159,7 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
 
   // --- Estado ---
   let levantado = 0; // brazos: 0 = abajo, 1 = arriba (va cambiando de a poco)
+  let reloj = 0; // segundos de juego, para las ondas del pogo (no corre en pausa)
   const direccion = new THREE.Vector3(); // hacia dónde mira el jugador
   const objetivo = new THREE.Vector3(); // el punto al que mira la cámara de tercera persona
 
@@ -174,7 +183,19 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
     // getWorldDirection da hacia dónde mira la cámara; atan2 lo pasa a un ángulo de giro.
     camara.getWorldDirection(direccion);
     cuerpo.position.set(camara.position.x, camara.position.y - ALTURA_OJOS, camara.position.z);
-    cuerpo.rotation.y = Math.atan2(direccion.x, direccion.z);
+
+    // Pogo: saltitos seguidos y ladeo de costado, según cuánto pogo está haciendo (0 a 1).
+    // Math.abs del seno da una onda siempre positiva: sube, baja, toca el piso y vuelve a subir.
+    // En pausa el reloj no corre: el cuerpo queda quieto donde estaba.
+    if (jugador.controles.isLocked) {
+      reloj += delta;
+    }
+    const pogo = acciones.cuantoPogo();
+    const fasePogo = reloj * Math.PI * 2 * SALTOS_POGO_POR_SEGUNDO;
+    cuerpo.position.y += Math.abs(Math.sin(fasePogo)) * SALTO_POGO * pogo;
+    const ladeo = Math.sin(fasePogo * 0.5) * LADEO_POGO * pogo; // de un lado al otro, más lento
+    // Gira para mirar como el jugador (y) y se ladea de costado (z).
+    cuerpo.rotation.set(0, Math.atan2(direccion.x, direccion.z), ladeo);
     // La sombra no salta con el cuerpo: se queda en el piso.
     sombra.position.y = ALTURA_SOMBRA - cuerpo.position.y;
     // Le avisamos a las acciones desde dónde se está viendo (ver gesto en acciones.js).
@@ -188,8 +209,11 @@ export function crearTerceraPersona({ escena, camara, jugador, acciones }) {
     const llevaAAlguien = hombros.children.some((hijo) => hijo.visible);
     const adelanteAbajo = llevaAAlguien ? BRAZOS_AGARRAN_ADELANTE : 0;
     const costadoAbajo = llevaAAlguien ? BRAZOS_AGARRAN_ADENTRO : ANGULO_BRAZO_ABAJO;
-    const adelante = mezclar(adelanteAbajo, 0, levantado);
-    const costado = mezclar(costadoAbajo, ANGULO_BRAZOS_ARRIBA, levantado);
+    // Con pogo los brazos se sacuden a media altura (salvo que lleve a alguien: no lo suelta).
+    const pogoBrazos = llevaAAlguien ? 0 : pogo;
+    const sacudida = SACUDIDA_BRAZOS_POGO * Math.sin(reloj * Math.PI * 2 * SACUDIDAS_BRAZOS_POR_SEGUNDO);
+    const adelante = mezclar(mezclar(adelanteAbajo, 0, levantado), 0, pogoBrazos);
+    const costado = mezclar(mezclar(costadoAbajo, ANGULO_BRAZOS_ARRIBA, levantado), ANGULO_BRAZOS_POGO + sacudida, pogoBrazos);
     // Cada brazo gira hacia su lado: el izquierdo con ángulo positivo, el derecho con negativo.
     brazoIzq.rotation.set(adelante, 0, costado);
 

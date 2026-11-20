@@ -1300,6 +1300,19 @@ export function crearBanda(clave, musica) {
     musicos.push(musico);
   }
 
+  // Algunas bandas mueven a sus músicos de lugar según el tema (por ahora solo Pepi y Manu).
+  // Si la banda lo hace, acá se guarda la función que los acomoda; si no, queda en null.
+  let acomodar = null;
+
+  // Acerca a un músico, de a poco, a un lugar de la tarima ({ x, z, giro }).
+  // Cada cuadro recorre una parte de lo que le falta: arranca rápido y frena al llegar.
+  function caminarHacia(grupoMusico, lugar, delta) {
+    const parte = Math.min(1, delta * 1.2); // más grande = llega más rápido
+    grupoMusico.position.x += (lugar.x - grupoMusico.position.x) * parte;
+    grupoMusico.position.z += (lugar.z - grupoMusico.position.z) * parte;
+    grupoMusico.rotation.y += (lugar.giro - grupoMusico.rotation.y) * parte;
+  }
+
   // Tarima de la batería: el baterista va al fondo, un poco más alto.
   // (Solo en las bandas con baterista: las de la carpa no tienen.)
   const ALTO_TARIMA_BATERIA = 0.5;
@@ -1377,8 +1390,30 @@ export function crearBanda(clave, musica) {
     agregar(crearGuitarrista({ piel: PIEL_MEDIA, remera: BLANCO, pantalon: JEAN, pelo: PELO_NEGRO }, 0x1c1c1c, true, 2.5), -2.6, 1.4, 0.3);
   } else if (clave === 'mv') {
     // Pepi canta adelante; Manu, con la guitarra, un poco más atrás a su derecha (−X).
-    agregar(crearPepi(), 0.7, Z_CANTANTE, -0.1);
-    agregar(crearManu(), -1.4, 2.0, 0.3);
+    const pepi = crearPepi();
+    const manu = crearManu();
+    agregar(pepi, 0.7, Z_CANTANTE, -0.1);
+    agregar(manu, -1.4, 2.0, 0.3);
+
+    // En los temas con "manuAdelante: true" (Loca, ver main.js) cambian de lugar:
+    // Pepi se va para atrás y a un costado, y Manu pasa adelante en el medio.
+    // Cada uno tiene dos lugares: el de siempre y el de cuando Manu va adelante.
+    const lugaresPepi = {
+      normal: { x: 0.7, z: Z_CANTANTE, giro: -0.1 },
+      atras: { x: 2.2, z: 0.9, giro: -0.4 }, // al fondo, del otro lado que Manu
+    };
+    const lugaresManu = {
+      normal: { x: -1.4, z: 2.0, giro: 0.3 },
+      adelante: { x: 0, z: Z_CANTANTE, giro: 0 },
+    };
+
+    // Cada cuadro, cada uno camina un poquito hacia el lugar que le toca
+    // (así se ve que se mueven, en vez de aparecer de golpe en el otro lado).
+    acomodar = (delta, tema) => {
+      const manuAdelante = tema.manuAdelante === true;
+      caminarHacia(pepi.grupo, manuAdelante ? lugaresPepi.atras : lugaresPepi.normal, delta);
+      caminarHacia(manu.grupo, manuAdelante ? lugaresManu.adelante : lugaresManu.normal, delta);
+    };
   } else if (clave === 'colo') {
     agregar(crearColo(), 0, Z_CANTANTE); // solo, con su guitarra
   }
@@ -1444,6 +1479,10 @@ export function crearBanda(clave, musica) {
     const tema = musica.temaActual();
     for (const musico of musicos) {
       musico.animar(reloj, pulso, saludo, tema);
+    }
+    // Si la banda cambia de lugares según el tema, los acomoda.
+    if (acomodar) {
+      acomodar(delta, tema);
     }
   }
 
